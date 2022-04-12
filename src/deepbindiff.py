@@ -1,6 +1,4 @@
-import os
 import collections
-import ntpath
 import math
 
 from shutil import copyfile
@@ -12,7 +10,8 @@ import preprocessing
 from deepwalk import deepwalk
 
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 
 
@@ -184,9 +183,7 @@ def main():
 
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter, conflict_handler='resolve')
     parser.add_argument('--input1', required=True, help='Input bin file 1')
-    
     parser.add_argument('--input2', required=True, help='Input bin file 2')
-
     parser.add_argument('--outputDir', required=True, help='Specify the output directory') 
     args = parser.parse_args()
     filepath1 = args.input1
@@ -197,19 +194,21 @@ def main():
     if outputDir.endswith('/') is False:
         outputDir = outputDir + '/'
 
-
     EDGELIST_FILE = outputDir + "edgelist"
 
-
+    # 第一步 预处理
     # step 1: perform preprocessing for the two binaries
     blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, _, _, bin1_name, bin2_name, toBeMergedBlocks = preprocessing.preprocessing(filepath1, filepath2, outputDir)
 
+    # 第二部 词汇表构建
     #step 2: vocabulary buildup
     dictionary, reversed_dictionary = vocBuild(blockIdxToTokens)
 
+    # 第三步 生成随机游走 每个随机游走包含特定的块
     # step 3: generate random walks, each walk contains certain blocks
     walks = deepwalk.randomWalksGen(EDGELIST_FILE, blockIdxToTokens)
 
+    # 第4步 基于随机游走生成文章
     # step 4: generate articles based on random walks
     article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart = articlesGen(walks, blockIdxToTokens, reversed_dictionary)
 

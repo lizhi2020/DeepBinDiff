@@ -49,13 +49,11 @@ def angrGraphGen(filepath1, filepath2):
     return cfg1, cg1, nodelist1, edgelist1, cfg2, cg2, nodelist2, edgelist2
 
 
-
-
 def nodeDicGen(nodelist1, nodelist2):
     # generate node dictionary for the two input binaries
     nodeDic1 = {}
     nodeDic2 = {}
-
+    # nodelist 数量等于 nodedic吗？
     for i in range(len(nodelist1)):
         nodeDic1[nodelist1[i]] = i
 
@@ -108,10 +106,10 @@ def offsetStrMappingGen(cfg1, cfg2, binary1, binary2, mneList):
     for func in cfg1.functions.values():
         if func.binary_name == binary1:
             for offset, strRef in func.string_references(vex_only=True):
-                offset = str(offset)
+                offset = str(offset) # why str?
                 #offset = str(hex(offset))[:-1]
                 if offset not in offsetStrMapping:
-                    offsetStrMapping[offset] = ''.join(strRef.split())
+                    offsetStrMapping[offset] = ''.join(strRef.split()) # why split?
         elif func.binary_name not in externFuncNamesBin1:
             externFuncNamesBin1.append(func.name)
     
@@ -270,7 +268,6 @@ def nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMappin
         nodeToIndex.write(str(len(nodelist1)) + ' ' + str(len(nodelist2)) + '\n') # write #nodes in both binaries
         
         for node in nodelist1:
-
             # extract predecessors and successors
             preds = node.predecessors
             succs = node.successors
@@ -283,7 +280,6 @@ def nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMappin
                 succs_ids.append(nodeDic1[succ])
             neighbors = [preds_ids, succs_ids]
             per_block_neighbors_bids[nodeDic1[node]] = neighbors
-
 
             # go through each instruction to extract token information
             if node.block is None:
@@ -341,7 +337,6 @@ def nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMappin
             # nodeToIndex.write("\n\n")
 
         for node in nodelist2:
-
             # extract predecessors and successors
             preds = node.predecessors
             succs = node.successors
@@ -549,37 +544,47 @@ def nodeFeaturesGen(nodelist1, nodelist2, mneList, mneDic, constDic, offsetStrMa
             feaVecFile.write("\n")
 
 
-
-# preprocessing the two binaries with Angr. 
+# preprocessing the two binaries with Angr. try to creat outputdir if it doesn't exist
 def preprocessing(filepath1, filepath2, outputDir):
-        
-        binary1 = path_leaf(filepath1)
-        binary2 = path_leaf(filepath2)
+    binary1 = path_leaf(filepath1)
+    binary2 = path_leaf(filepath2)
 
-        if not os.path.exists(outputDir):
-            os.makedirs(outputDir)
+    if not os.path.exists(outputDir):
+        os.makedirs(outputDir)
 
-        cfg1, cg1, nodelist1, edgelist1, cfg2, cg2, nodelist2, edgelist2 = angrGraphGen(filepath1, filepath2)
-        nodeDic1, nodeDic2 = nodeDicGen(nodelist1, nodelist2)
+    # cfg1, cg1, nodelist1, edgelist1, cfg2, cg2, nodelist2, edgelist2 = angrGraphGen(filepath1, filepath2)
+    proj1 = angr.Project(filepath1,load_options={'auto_load_libs':False})
+    proj2 = angr.Project(filepath2,load_options={'auto_load_libs':False})
 
-        mneList, _ = instrTypeDicGen(nodelist1, nodelist2)
+    cfg1 = proj1.analyses.CFGFast()
+    cfg2 = proj2.analyses.CFGFast()
 
-        # print("\t extracing strings...")
-        offsetStrMapping, externFuncNamesBin1, externFuncNamesBin2 = offsetStrMappingGen(cfg1, cfg2, binary1, binary2, mneList)
-        
-        print("\tprocessing instructions...")
-        blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, string_bid1, string_bid2 = nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMapping, outputDir)
+    nodelist1 = list(cfg1.graph.nodes)
+    edgelist1 = list(cfg1.graph.edges)
 
-        toBeMergedBlocks, toBeMergedBlocksReverse, toBeMergedFuncs, toBeMergedFuncsReverse = externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, binary2, nodeDic1, nodeDic2, externFuncNamesBin1, externFuncNamesBin2, string_bid1, string_bid2)
-        
-        # print("\t processing functions...")
-        # funclist1, funclist2 = functionIndexToCodeGen(cfg1, cg1, nodelist1, nodeDic1, cfg2, cg2, nodelist2, nodeDic2, binary1, binary2, outputDir)
+    nodelist2 = list(cfg2.graph.nodes)
+    edgelist2 = list(cfg2.graph.edges)
 
-        print("\tgenerating CFGs...")
-        edgeListGen(edgelist1, nodeDic1, edgelist2, nodeDic2, toBeMergedBlocks, toBeMergedBlocksReverse, outputDir)
+    nodeDic1, nodeDic2 = nodeDicGen(nodelist1, nodelist2)
 
-        # print("\t generating call graphs...")
-        # funcedgeListGen(cg1, funclist1, cg2, funclist2, toBeMergedFuncsReverse, outputDir)
+    mneList, _ = instrTypeDicGen(nodelist1, nodelist2)
 
-        print("Preprocessing all done. Enjoy!!")
-        return blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, nodeDic1, nodeDic2, binary1, binary2, toBeMergedBlocks
+    # print("\t extracing strings...")
+    offsetStrMapping, externFuncNamesBin1, externFuncNamesBin2 = offsetStrMappingGen(cfg1, cfg2, binary1, binary2, mneList)
+    
+    print("\tprocessing instructions...")
+    blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, string_bid1, string_bid2 = nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMapping, outputDir)
+
+    toBeMergedBlocks, toBeMergedBlocksReverse, toBeMergedFuncs, toBeMergedFuncsReverse = externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, binary2, nodeDic1, nodeDic2, externFuncNamesBin1, externFuncNamesBin2, string_bid1, string_bid2)
+    
+    # print("\t processing functions...")
+    # funclist1, funclist2 = functionIndexToCodeGen(cfg1, cg1, nodelist1, nodeDic1, cfg2, cg2, nodelist2, nodeDic2, binary1, binary2, outputDir)
+
+    print("\tgenerating CFGs...")
+    edgeListGen(edgelist1, nodeDic1, edgelist2, nodeDic2, toBeMergedBlocks, toBeMergedBlocksReverse, outputDir)
+
+    # print("\t generating call graphs...")
+    # funcedgeListGen(cg1, funclist1, cg2, funclist2, toBeMergedFuncsReverse, outputDir)
+
+    print("Preprocessing all done. Enjoy!!")
+    return blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, nodeDic1, nodeDic2, binary1, binary2, toBeMergedBlocks

@@ -23,6 +23,8 @@ opcode_idx_list = []
 
 # blockIdxToTokens: blockIdxToTokens[block index] = token list
 # return dictionary: index to token, reversed_dictionary: token to index
+# 统计所有的token 然后编个号
+# token仅仅只是一个字符串 reg8 mov imme 等等
 def vocBuild(blockIdxToTokens):
     global opcode_idx_list
     vocabulary = []
@@ -42,9 +44,6 @@ def vocBuild(blockIdxToTokens):
     dictionary = dict(zip(reversed_dictionary.values(), reversed_dictionary.keys()))
     count.extend(collections.Counter(vocabulary).most_common(1000 - 1))
     print('20 most common tokens: ', count[:20])
-
-    del vocabulary
-
     return dictionary, reversed_dictionary
 
 
@@ -72,19 +71,10 @@ def articlesGen(walks, blockIdxToTokens, reversed_dictionary):
     indexToCurrentInsnsStart = {}
     # blockEnd + 1 so that we can traverse to blockEnd
     # go through the current block to retrive instruction starting indices
-    for i in range(0, len(article)): 
+    for i in range(len(article)): 
         if article[i] in opcode_idx_list:
             insnStartingIndices.append(i)
         indexToCurrentInsnsStart[i] = len(insnStartingIndices) - 1
-
-    
-    # for counter, value in enumerate(insnStartingIndices):
-    #     if data_index == value:
-    #         currentInsnStart = counter
-    #         break
-    #     elif data_index < value:
-    #         currentInsnStart = counter - 1
-    #         break
 
     return article, blockBoundaryIdx, insnStartingIndices, indexToCurrentInsnsStart
 
@@ -198,15 +188,17 @@ def main():
 
     # 第一步 预处理
     # step 1: perform preprocessing for the two binaries
-    blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, _, _, bin1_name, bin2_name, toBeMergedBlocks = preprocessing.preprocessing(filepath1, filepath2, outputDir)
+    blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, _, _, bin1_name, bin2_name, toBeMergedBlocks =\
+    preprocessing.preprocessing(filepath1, filepath2, outputDir)
 
     # 第二部 词汇表构建
     #step 2: vocabulary buildup
+    # blockIdxToTokens 块对应的Token列表 binary1 binar2的块混在一起 
     dictionary, reversed_dictionary = vocBuild(blockIdxToTokens)
 
     # 第三步 生成随机游走 每个随机游走包含特定的块
     # step 3: generate random walks, each walk contains certain blocks
-    walks = deepwalk.randomWalksGen(EDGELIST_FILE, blockIdxToTokens)
+    walks = deepwalk.process(EDGELIST_FILE, blockIdxToTokens)
 
     # 第4步 基于随机游走生成文章
     # step 4: generate articles based on random walks

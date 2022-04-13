@@ -42,8 +42,10 @@ def debug(type_, value, tb):
     print(u"\n")
     pdb.pm()
 
-
-def process(edgelistFile, indexToTokens, undirected, number_walks, walk_length, seed):
+# number_walks: number of walks per node
+# walk_length: the length of each random walk
+# seed: random seed
+def process(edgelistFile, indexToTokens, undirected=False, number_walks=2, walk_length=4, seed=0):
   G = graph.load_edgelist(edgelistFile, undirected=undirected)
 
   print("Number of nodes: {}".format(len(G.nodes())))
@@ -53,9 +55,7 @@ def process(edgelistFile, indexToTokens, undirected, number_walks, walk_length, 
   print("Data size (walks*length): {}".format(data_size))
 
   print("Walking...")
-  walks = graph.build_deepwalk_corpus(G, num_paths=number_walks, path_length=walk_length, alpha=0, rand=random.Random(seed))
-  
-
+  walks = graph.build_deepwalk_corpus(G, num_paths=number_walks, path_length=walk_length, alpha=0, rand=random.Random(seed)) 
   return walks
 
 
@@ -84,13 +84,3 @@ def process(edgelistFile, indexToTokens, undirected, number_walks, walk_length, 
   #                    window=args.window_size, min_count=0, trim_rule=None, workers=args.workers)
 
   # model.wv.save_word2vec_format(args.output)
-
-
-# number_walks: number of walks per node
-# walk_length: the length of each random walk
-# seed: random seed
-def randomWalksGen(edgelistFile, indexToTokens, undirected=False, number_walks=2, walk_length=4, seed=0):
-  return process(edgelistFile, indexToTokens, undirected, number_walks, walk_length, seed)
-
-# if __name__ == "__main__":
-#     print("deepwalk.py")

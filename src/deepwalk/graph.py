@@ -42,9 +42,7 @@ class Graph(defaultdict):
     return subgraph
 
   def make_undirected(self):
-  
     t0 = time()
-
     for v in self.keys():
       for other in self[v]:
         if v != other:

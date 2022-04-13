@@ -380,11 +380,7 @@ def buildAndTraining(article, blockBoundaryIndex, insnStartingIndices, indexToCu
             # print("Randon walk", counter, " embedding: ", rw_embed.eval())
 
         final_embeddings = normalized_embeddings.eval()
-
-
-
     return final_embeddings
-
 
 
 def tokenEmbeddingGeneration(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary, reversed_dictionary, opcode_idx_list):

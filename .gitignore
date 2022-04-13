@@ -1,0 +1,5 @@
+data
+output
+*.pyc
+*.txt
+vec_all

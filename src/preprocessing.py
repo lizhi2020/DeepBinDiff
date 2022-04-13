@@ -441,7 +441,7 @@ def functionIndexToCodeGen(cfg1, cg1, nodelist1, nodeDic1, cfg2, cg2, nodelist2,
     return funclist1, funclist2
 
 
-
+# 这里写 output/edgelist
 # This function generates super CFG edge list. We also replace external function blocks in binary 2 from block in binary 1
 def edgeListGen(edgelist1, nodeDic1, edgelist2, nodeDic2, toBeMerged, toBeMergedReverse, outputDir):
     with open(outputDir + 'edgelist_merged_tadw', 'w') as edgelistFile:

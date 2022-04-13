@@ -75,7 +75,6 @@ def articlesGen(walks, blockIdxToTokens, reversed_dictionary):
         if article[i] in opcode_idx_list:
             insnStartingIndices.append(i)
         indexToCurrentInsnsStart[i] = len(insnStartingIndices) - 1
-
     return article, blockBoundaryIdx, insnStartingIndices, indexToCurrentInsnsStart
 
 
@@ -83,7 +82,6 @@ def articlesGen(walks, blockIdxToTokens, reversed_dictionary):
 def cal_block_embeddings(blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, tokenEmbeddings, reversed_dictionary):
     block_embeddings = {}
     totalBlockNum = len(blockIdxToOpcodeCounts)
-
 
     for bid in blockIdxToTokens:
         tokenlist = blockIdxToTokens[bid]
@@ -96,9 +94,7 @@ def cal_block_embeddings(blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcode
         if len(tokenlist) != 0:
             for token in tokenlist:
                 tokenid = reversed_dictionary[token]
-
                 tokenEmbedding = tokenEmbeddings[tokenid]
-
                 if tokenid in opcode_idx_list and token in opcodeCounts:
                     # here we multiple the embedding with its TF-IDF weight if the token is an opcode
                     tf_weight = opcodeCounts[token] / opcodeNum
@@ -106,7 +102,6 @@ def cal_block_embeddings(blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcode
                     idf_weight = math.log(x)
                     tf_idf_weight = tf_weight * idf_weight
                     # print("tf-idf: ", token, opcodeCounts[token], opcodeNum, totalBlockNum, insToBlockCounts[token], tf_weight, idf_weight)
-
                     opcodeEmbeddings.append(tokenEmbedding * tf_idf_weight)
                 else:
                     operandEmbeddings.append(tokenEmbedding)
@@ -122,6 +117,7 @@ def cal_block_embeddings(blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcode
             opcode_embed = np.zeros(embedding_size)
             operand_embed = np.zeros(embedding_size)
 
+        # !!!
         # if no operand, give zeros
         if operand_embed.size == 1:
             operand_embed = np.zeros(len(opcode_embed))
@@ -130,15 +126,11 @@ def cal_block_embeddings(blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcode
         block_embed = np.concatenate((opcode_embed, operand_embed), axis=0)
         block_embeddings[bid] = block_embed
         # print("bid", bid, "block embedding:", block_embed)
-
-
     return block_embeddings
-
 
 
 def feature_vec_file_gen(feature_file, block_embeddings):
     with open(feature_file,'w') as feaVecFile:
-
         for counter in block_embeddings:
             value = block_embeddings[counter]
             # index as the first element and then output all the features
@@ -179,7 +171,6 @@ def main():
     filepath1 = args.input1
     filepath2 = args.input2
     outputDir = args.outputDir
-
 
     if outputDir.endswith('/') is False:
         outputDir = outputDir + '/'

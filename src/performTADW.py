@@ -134,7 +134,6 @@ def main(args):
         clf.split_train_evaluate(X, Y, args.clf_ratio)
 
 
-
 if __name__ == "__main__":
     random.seed(32)
     np.random.seed(32)

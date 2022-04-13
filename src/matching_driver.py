@@ -34,13 +34,10 @@ EBD_CALL_GRAPH = False
 
 def pre_matching(bin1_name, bin2_name, toBeMergedBlocks={}):
     # if sys.platform != "win32":
-
-
     tadw_command = "python3 ./src/performTADW.py --method tadw --input " + bin_edgelist_file + " --graph-format edgelist --feature-file " + bin_features_file + " --output vec_all"
     os.system(tadw_command)
     
     ebd_dic, _ = utility.ebd_file_to_dic(embedding_file)
-
     node_in_bin1, _node_in_bin2 = utility.readNodeInfo(node2addr_file)
     
     

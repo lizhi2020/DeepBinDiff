@@ -251,17 +251,16 @@ def nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMappin
     # blockIdxToTokens[id] = token list of that block
     blockIdxToTokens = {}
 
-
     # used to calculate TF part of the TF-IDF
     # it stores # of instructions per block
     blockIdxToOpcodeNum = {}
 
     # it stores # of instruction appears in one block
+    # opcode的统计 每一个元素都是一个字典
     blockIdxToOpcodeCounts = {}
 
     # calculate IDF part of the information. It stores # of blocks that contain each instruction
     insToBlockCounts = {}
-
 
     # store the node index to code mapping for reference
     with open(outputDir + 'nodeIndexToCode', 'w') as nodeToIndex:
@@ -296,10 +295,7 @@ def nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMappin
 
             # stores the instructions that have been counted for at least once in this block
             countedInsns = []
-            numInsns = 0
             for insn in node.block.capstone.insns:
-                numInsns = numInsns + 1
-
                 if insn.mnemonic not in opcode_list:
                     opcode_list.append(insn.mnemonic)
 
@@ -331,10 +327,7 @@ def nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMappin
             # nodeToIndex.write("\ttoken:" + str(tokens) + "\n\n")
             blockIdxToTokens[str(nodeDic1[node])] = tokens
             blockIdxToOpcodeCounts[str(nodeDic1[node])] = opcodeCounts
-            blockIdxToOpcodeNum[str(nodeDic1[node])] = numInsns
-
-            #blockIdxToInstructions[str(nodeDic1[node])] = insns
-            # nodeToIndex.write("\n\n")
+            blockIdxToOpcodeNum[str(nodeDic1[node])] = len(node.block.capstone.isns)
 
         for node in nodelist2:
             # extract predecessors and successors
@@ -358,7 +351,6 @@ def nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMappin
                 blockIdxToOpcodeCounts[str(nodeDic2[node])] = {}
                 blockIdxToOpcodeNum[str(nodeDic2[node])] = 0
                 continue
-
 
             tokens = []
             opcodeCounts = {}

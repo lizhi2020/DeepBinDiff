@@ -1,10 +1,11 @@
+from typing import Dict, List
 import angr
 import os
 import ntpath
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 # this list contains all the opcode in the two binaries
-opcode_list = []
+opcode_set = set()
 
 # this dictionary stores the predecessors and successors of nodes
 # per_block_neighbors_bids[block_id] = [[predecessors],[successors]]
@@ -13,14 +14,10 @@ per_block_neighbors_bids = {}
 # blocks that have no code
 non_code_block_ids = []
 
-
 # register list
 register_list_8_byte = ['rax', 'rcx', 'rdx', 'rbx', 'rsi', 'rdi', 'rsp', 'rbp', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
-
 register_list_4_byte = ['eax', 'ecx', 'edx', 'ebx', 'esi', 'edi', 'esp', 'ebp', 'r8d', 'r9d', 'r10d', 'r11d', 'r12d', 'r13d', 'r14d', 'r15d']
-
 register_list_2_byte = ['ax', 'cx', 'dx', 'bx', 'si', 'di', 'sp', 'bp', 'r8w', 'r9w', 'r10w', 'r11w', 'r12w', 'r13w', 'r14w', 'r15w']
-
 register_list_1_byte = ['al', 'cl', 'dl', 'bl', 'sil', 'dil', 'spl', 'bpl', 'r8b', 'r9b', 'r10b', 'r11b', 'r12b', 'r13b', 'r14b', 'r15b']
 
 
@@ -48,96 +45,31 @@ def angrGraphGen(filepath1, filepath2):
     edgelist2 = list(cfg2.graph.edges)
     return cfg1, cg1, nodelist1, edgelist1, cfg2, cg2, nodelist2, edgelist2
 
+# 为节点分配id 从0开始
+# 返回字典 node:id
+def GenNodeID(cfgs: List[angr.analyses.CFG],start=0):
+    cnt=start
+    nodeID={}
+    for cfg in cfgs:
+        for node in cfg.graph.nodes:
+            nodeID[node] = cnt
+            cnt+=1
+    return nodeID
 
-def nodeDicGen(nodelist1, nodelist2):
-    # generate node dictionary for the two input binaries
-    nodeDic1 = {}
-    nodeDic2 = {}
-    # nodelist 数量等于 nodedic吗？
-    for i in range(len(nodelist1)):
-        nodeDic1[nodelist1[i]] = i
-
-    for i in range(len(nodelist2)):
-        j = i + len(nodelist1)
-        nodeDic2[nodelist2[i]] = j
-
-    print("The two binaries have total of {} nodes.".format(len(nodeDic1) + len(nodeDic2)))
-    return nodeDic1, nodeDic2
-
-
-def instrTypeDicGen(nodelist1, nodelist2):
-    # count type of instruction for feature vector generation
-    mneList = []
-
-    for node in nodelist1:
-        if node.block is None:
-            continue
-        for insn in node.block.capstone.insns:
-            mne = insn.mnemonic
-            if mne not in mneList:
-                mneList.append(mne)
-
-    for node in nodelist2:
-        if node.block is None:
-            continue
-        for insn in node.block.capstone.insns:
-            mne = insn.mnemonic
-            if mne not in mneList:
-                mneList.append(mne)
-
-    mneDic = {}
-    for i in range(len(mneList)):
-        mneDic[mneList[i]] = i
-    print("there are total of {} types of instructions in the two binaries".format(len(mneList)))
-    return mneList, mneDic
-
-
-
-def offsetStrMappingGen(cfg1, cfg2, binary1, binary2, mneList):
-    # count type of constants for feature vector generation
-    
-    # offsetStrMapping[offset] = strRef.strip()
-    offsetStrMapping = {}
-
-    # lists that store all the non-binary functions in bin1 and 2
-    externFuncNamesBin1 = []
-    externFuncNamesBin2 = []
-
-    for func in cfg1.functions.values():
-        if func.binary_name == binary1:
+def getOffsetStrMap(cfg,binary_name):
+    mapping = {} # 偏移:字符串
+    externalSet = set() # 引用外部函数
+    for func in cfg.functions.values():
+        if func.binary_name == binary_name:
             for offset, strRef in func.string_references(vex_only=True):
-                offset = str(offset) # why str?
-                #offset = str(hex(offset))[:-1]
-                if offset not in offsetStrMapping:
-                    offsetStrMapping[offset] = ''.join(strRef.split()) # why split?
-        elif func.binary_name not in externFuncNamesBin1:
-            externFuncNamesBin1.append(func.name)
-    
-    for func in cfg2.functions.values():
-        if func.binary_name == binary2:
-            for offset, strRef in func.string_references(vex_only=True):
-                offset = str(offset)
-                #offset = str(hex(offset))[:-1] #[:-1] is to remove the L from say "0x420200L"
-                if offset not in offsetStrMapping:
-                    offsetStrMapping[offset] = ''.join(strRef.split())
-        elif func.binary_name not in externFuncNamesBin2:
-            externFuncNamesBin2.append(func.name)
-    # constDic = {}
-    # i = len(mneList)
-    # for key in offsetStrMapping.values():
-    #     print('{}: {}'.format(i,key))
-    #     constDic[key] = i
-    #     i = i + 1
-
-    print("there are total of {} types of strings in the two binaries".format(len(offsetStrMapping)))
-    return offsetStrMapping, externFuncNamesBin1, externFuncNamesBin2
-
-
-
+                mapping[str(offset)] = ''.join(strRef.split()) # why str() why split
+        else:
+            externalSet.add(func.name)
+    return (mapping,externalSet)
 # This func extracts the blocks that represent the same external function from both binary 1 and 2. 
 # For example, from libc.so
 # Somehow angr will create a block in binary 1 and 2 if they call an external function
-def externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, binary2, nodeDic1, nodeDic2, externFuncNamesBin1, externFuncNamesBin2, string_bid1, string_bid2):
+def externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, binary2, nodeID: Dict, externFuncNamesBin1, externFuncNamesBin2):
     # toBeMerged[node1_id] = node2_id
     toBeMergedBlocks = {}
     toBeMergedBlocksReverse = {}
@@ -156,10 +88,11 @@ def externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, bi
         funcName = func.name
         funcAddr = func.addr
         blockList = list(func.blocks)
+        # problem?
         if (binName == binary1) and (funcName in externFuncNamesBin1) and (len(blockList) == 1):
             for node in nodelist1:
                 if (node.block is not None) and (node.block.addr == blockList[0].addr):     
-                    externFuncNameBlockMappingBin1[funcName] = nodeDic1[node]
+                    externFuncNameBlockMappingBin1[funcName] = nodeID[node]
                     funcNameAddrMappingBin1[funcName] = funcAddr
 
     for func in cfg2.functions.values():
@@ -170,7 +103,7 @@ def externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, bi
         if (binName == binary2) and (funcName in externFuncNamesBin2) and (len(blockList) == 1):
             for node in nodelist2:
                 if (node.block is not None) and (node.block.addr == blockList[0].addr):     
-                    externFuncNameBlockMappingBin2[funcName] = nodeDic2[node]
+                    externFuncNameBlockMappingBin2[funcName] = nodeID[node]
                     funcNameAddrMappingBin2[funcName] = funcAddr
 
 
@@ -186,27 +119,11 @@ def externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, bi
             toBeMergedFuncs[func1Addr] = func2Addr
             toBeMergedFuncsReverse[func2Addr] = func1Addr
 
-
-    # now we also consider string as an indicator for merging
-    for opstr in string_bid1:
-        if opstr in string_bid2 and len(opstr) > 5:
-            bid1 = string_bid1[opstr]
-            bid2 = string_bid2[opstr]
-
-            if bid1 in toBeMergedBlocks and bid2 != toBeMergedBlocks[bid1]:
-                print("wierd!", bid1, toBeMergedBlocks[bid1], bid2)
-            else:
-                toBeMergedBlocks[bid1] = bid2
-    
-
-
     print("TOBEMEGERED size: ", len(toBeMergedBlocks),"\n", toBeMergedBlocks, "\n")
-    #print("to be merged funcs: ", toBeMergedFuncs)
-    return toBeMergedBlocks, toBeMergedBlocksReverse, toBeMergedFuncs, toBeMergedFuncsReverse
+    return toBeMergedBlocks, toBeMergedBlocksReverse
 
 
-
-
+# 归一化：只对操作数归一化
 def normalization(opstr, offsetStrMapping):
     optoken = ''
 
@@ -238,167 +155,6 @@ def normalization(opstr, offsetStrMapping):
         optoken = str(opstr)
         # nodeToIndex.write(opstr + "\n")
     return optoken
-
-
-def nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMapping, outputDir):
-
-    # this dictionary stores the string to block id mapping
-    # string_bid[string] = bid
-    string_bid1 = {}
-    string_bid2 = {}
-
-    # stores the index of block to its tokens
-    # blockIdxToTokens[id] = token list of that block
-    blockIdxToTokens = {}
-
-    # used to calculate TF part of the TF-IDF
-    # it stores # of instructions per block
-    blockIdxToOpcodeNum = {}
-
-    # it stores # of instruction appears in one block
-    # opcode的统计 每一个元素都是一个字典
-    blockIdxToOpcodeCounts = {}
-
-    # calculate IDF part of the information. It stores # of blocks that contain each instruction
-    insToBlockCounts = {}
-
-    # store the node index to code mapping for reference
-    with open(outputDir + 'nodeIndexToCode', 'w') as nodeToIndex:
-        nodeToIndex.write(str(len(nodelist1)) + ' ' + str(len(nodelist2)) + '\n') # write #nodes in both binaries
-        
-        for node in nodelist1:
-            # extract predecessors and successors
-            preds = node.predecessors
-            succs = node.successors
-            preds_ids = []
-            succs_ids = []
-
-            for pred in preds:
-                preds_ids.append(nodeDic1[pred])
-            for succ in succs:
-                succs_ids.append(nodeDic1[succ])
-            neighbors = [preds_ids, succs_ids]
-            per_block_neighbors_bids[nodeDic1[node]] = neighbors
-
-            # go through each instruction to extract token information
-            if node.block is None:
-                non_code_block_ids.append(nodeDic1[node])
-                blockIdxToTokens[str(nodeDic1[node])] = []
-                blockIdxToOpcodeCounts[str(nodeDic1[node])] = {}
-                blockIdxToOpcodeNum[str(nodeDic1[node])] = 0
-                #blockIdxToInstructions[str(nodeDic1[node])] = []
-                continue
-            tokens = []
-            opcodeCounts = {}
-            nodeToIndex.write(str(nodeDic1[node]) + ':\n')
-            nodeToIndex.write(str(node.block.capstone.insns) + "\n\n")
-
-            # stores the instructions that have been counted for at least once in this block
-            countedInsns = []
-            for insn in node.block.capstone.insns:
-                if insn.mnemonic not in opcode_list:
-                    opcode_list.append(insn.mnemonic)
-
-                if insn.mnemonic not in countedInsns:
-                    if insn.mnemonic not in insToBlockCounts:
-                        insToBlockCounts[insn.mnemonic] = 1
-                    else:
-                        insToBlockCounts[insn.mnemonic] = insToBlockCounts[insn.mnemonic] + 1
-                    countedInsns.append(insn.mnemonic)
-
-                if insn.mnemonic not in opcodeCounts:
-                    opcodeCounts[insn.mnemonic] = 1
-                else:
-                    opcodeCounts[insn.mnemonic] = opcodeCounts[insn.mnemonic] + 1
-
-                tokens.append(str(insn.mnemonic))
-                opStrs = insn.op_str.split(", ")
-                for opstr in opStrs:
-                    optoken = normalization(opstr, offsetStrMapping)
-                    if optoken != '':
-                        tokens.append(optoken)
-
-                    opstrNum = ""
-                    if opstr.startswith("0x") or opstr.startswith("0X"):
-                        opstrNum = str(int(opstr, 16))
-                    if opstrNum in offsetStrMapping:
-                        string_bid1[offsetStrMapping[opstrNum]] = nodeDic1[node]
-
-            # nodeToIndex.write("\ttoken:" + str(tokens) + "\n\n")
-            blockIdxToTokens[str(nodeDic1[node])] = tokens
-            blockIdxToOpcodeCounts[str(nodeDic1[node])] = opcodeCounts
-            blockIdxToOpcodeNum[str(nodeDic1[node])] = len(node.block.capstone.isns)
-
-        for node in nodelist2:
-            # extract predecessors and successors
-            preds = node.predecessors
-            succs = node.successors
-            preds_ids = []
-            succs_ids = []
-
-            for pred in preds:
-                preds_ids.append(nodeDic2[pred])
-            for succ in succs:
-                succs_ids.append(nodeDic2[succ])
-            neighbors = [preds_ids, succs_ids]
-            per_block_neighbors_bids[nodeDic2[node]] = neighbors
-
-
-            # go through each instruction to extract token information
-            if node.block is None:
-                non_code_block_ids.append(nodeDic2[node])
-                blockIdxToTokens[str(nodeDic2[node])] = []
-                blockIdxToOpcodeCounts[str(nodeDic2[node])] = {}
-                blockIdxToOpcodeNum[str(nodeDic2[node])] = 0
-                continue
-
-            tokens = []
-            opcodeCounts = {}
-            nodeToIndex.write(str(nodeDic2[node]) + ':\n')
-            nodeToIndex.write(str(node.block.capstone.insns) + "\n\n")
-
-            countedInsns = []
-            numInsns = 0
-            for insn in node.block.capstone.insns:
-                numInsns = numInsns + 1
-
-                if insn.mnemonic not in opcode_list:
-                    opcode_list.append(insn.mnemonic)
-
-                if insn.mnemonic not in countedInsns:
-                    if insn.mnemonic not in insToBlockCounts:
-                        insToBlockCounts[insn.mnemonic] = 1
-                    else:
-                        insToBlockCounts[insn.mnemonic] = insToBlockCounts[insn.mnemonic] + 1
-                    countedInsns.append(insn.mnemonic)
-
-                if insn.mnemonic not in opcodeCounts:
-                    opcodeCounts[insn.mnemonic] = 1
-                else:
-                    opcodeCounts[insn.mnemonic] = opcodeCounts[insn.mnemonic] + 1
-
-                tokens.append(str(insn.mnemonic))
-                opStrs = insn.op_str.split(", ")
-                for opstr in opStrs:
-                    optoken = normalization(opstr, offsetStrMapping)
-                    if optoken != '':
-                        tokens.append(optoken)
-                    
-                    opstrNum = ""
-                    if opstr.startswith("0x") or opstr.startswith("0X"):
-                        opstrNum = str(int(opstr, 16))
-                    if opstrNum in offsetStrMapping:
-                        string_bid2[offsetStrMapping[opstrNum]] = nodeDic2[node]
-
-            # nodeToIndex.write("\ttoken" + str(tokens) + "\n\n")
-            blockIdxToTokens[str(nodeDic2[node])] = tokens
-            blockIdxToOpcodeCounts[str(nodeDic2[node])] = opcodeCounts
-            blockIdxToOpcodeNum[str(nodeDic2[node])] = numInsns
-            # nodeToIndex.write("\n\n")
-
-    return blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, string_bid1, string_bid2
-
-
 
 def functionIndexToCodeGen(cfg1, cg1, nodelist1, nodeDic1, cfg2, cg2, nodelist2, nodeDic2, binary1, binary2, outputDir):
     # store function addresses
@@ -435,13 +191,13 @@ def functionIndexToCodeGen(cfg1, cg1, nodelist1, nodeDic1, cfg2, cg2, nodelist2,
 
 # 这里写 output/edgelist
 # This function generates super CFG edge list. We also replace external function blocks in binary 2 from block in binary 1
-def edgeListGen(edgelist1, nodeDic1, edgelist2, nodeDic2, toBeMerged, toBeMergedReverse, outputDir):
+def edgeListGen(edgelist1, edgelist2, nodeID, toBeMergedReverse, outputDir):
     with open(outputDir + 'edgelist_merged_tadw', 'w') as edgelistFile:
         for (src, tgt) in edgelist1:
-            edgelistFile.write(str(nodeDic1[src]) + " " + str(nodeDic1[tgt]) + "\n")
+            edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
         for (src, tgt) in edgelist2:
-            src_id = nodeDic2[src]
-            tgt_id = nodeDic2[tgt]
+            src_id = nodeID[src]
+            tgt_id = nodeID[tgt]
 
             new_src_id = src_id
             new_tgt_id = tgt_id
@@ -455,9 +211,9 @@ def edgeListGen(edgelist1, nodeDic1, edgelist2, nodeDic2, toBeMerged, toBeMerged
 
     with open(outputDir + 'edgelist', 'w') as edgelistFile:
         for (src, tgt) in edgelist1:
-            edgelistFile.write(str(nodeDic1[src]) + " " + str(nodeDic1[tgt]) + "\n")
+            edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
         for (src, tgt) in edgelist2:
-            edgelistFile.write(str(nodeDic2[src]) + " " + str(nodeDic2[tgt]) + "\n")
+            edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
 
 
 def funcedgeListGen(cg1, funclist1, cg2, funclist2, toBeMergedFuncsReverse, outputDir):
@@ -535,7 +291,6 @@ def nodeFeaturesGen(nodelist1, nodelist2, mneList, mneDic, constDic, offsetStrMa
                 feaVecFile.write(str(feaVec[k]) + " ")
             feaVecFile.write("\n")
 
-
 # preprocessing the two binaries with Angr. try to creat outputdir if it doesn't exist
 def preprocessing(filepath1, filepath2, outputDir):
     binary1 = path_leaf(filepath1)
@@ -545,11 +300,8 @@ def preprocessing(filepath1, filepath2, outputDir):
         os.makedirs(outputDir)
 
     # cfg1, cg1, nodelist1, edgelist1, cfg2, cg2, nodelist2, edgelist2 = angrGraphGen(filepath1, filepath2)
-    proj1 = angr.Project(filepath1,load_options={'auto_load_libs':False})
-    proj2 = angr.Project(filepath2,load_options={'auto_load_libs':False})
-
-    cfg1 = proj1.analyses.CFGFast()
-    cfg2 = proj2.analyses.CFGFast()
+    cfg1 = getCFG(filepath1)
+    cfg2 = getCFG(filepath2)
 
     nodelist1 = list(cfg1.graph.nodes)
     edgelist1 = list(cfg1.graph.edges)
@@ -557,26 +309,98 @@ def preprocessing(filepath1, filepath2, outputDir):
     nodelist2 = list(cfg2.graph.nodes)
     edgelist2 = list(cfg2.graph.edges)
 
-    nodeDic1, nodeDic2 = nodeDicGen(nodelist1, nodelist2)
+    # 注意 nodeID与blockinf_list的索引是对应的。对一个node 其id为nodeID[node] 其blockinfo = blockinfo_list[id]
+    # todo opt
+    nodeID = GenNodeID([cfg1,cfg2])
+    # 相同的偏移包含不同的字符串？
+    offstrmap, externFuncNamesBin1 = getOffsetStrMap(cfg1,binary1)
+    tmpmap, externFuncNamesBin2 = getOffsetStrMap(cfg2,binary2)
 
-    mneList, _ = instrTypeDicGen(nodelist1, nodelist2)
-
-    # print("\t extracing strings...")
-    offsetStrMapping, externFuncNamesBin1, externFuncNamesBin2 = offsetStrMappingGen(cfg1, cfg2, binary1, binary2, mneList)
+    offstrmap.update(tmpmap)
+    blockinf_list,insToBlockCounts,string_bid_list = processblock([cfg1,cfg2],offstrmap,nodeID)
     
-    print("\tprocessing instructions...")
-    blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, string_bid1, string_bid2 = nodeIndexToCodeGen(nodelist1, nodelist2, nodeDic1, nodeDic2, offsetStrMapping, outputDir)
+    # string_bid: 字符串到块的映射 用于判断块融合
+    # 字符串判断逻辑暂时被删除
 
-    toBeMergedBlocks, toBeMergedBlocksReverse, toBeMergedFuncs, toBeMergedFuncsReverse = externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, binary2, nodeDic1, nodeDic2, externFuncNamesBin1, externFuncNamesBin2, string_bid1, string_bid2)
-    
-    # print("\t processing functions...")
-    # funclist1, funclist2 = functionIndexToCodeGen(cfg1, cg1, nodelist1, nodeDic1, cfg2, cg2, nodelist2, nodeDic2, binary1, binary2, outputDir)
+    # string_bid
+    toBeMergedBlocks, toBeMergedBlocksReverse = externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, binary2, nodeID, externFuncNamesBin1, externFuncNamesBin2)
+    # string_bid block merge
 
+    # 这一步是必须的 deepwalk会读取该文件
     print("\tgenerating CFGs...")
-    edgeListGen(edgelist1, nodeDic1, edgelist2, nodeDic2, toBeMergedBlocks, toBeMergedBlocksReverse, outputDir)
-
-    # print("\t generating call graphs...")
-    # funcedgeListGen(cg1, funclist1, cg2, funclist2, toBeMergedFuncsReverse, outputDir)
+    edgeListGen(edgelist1, edgelist2, nodeID, toBeMergedBlocksReverse, outputDir)
 
     print("Preprocessing all done. Enjoy!!")
-    return blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, nodeDic1, nodeDic2, binary1, binary2, toBeMergedBlocks
+    return blockinf_list, insToBlockCounts, toBeMergedBlocks
+
+# 返回cfg 该结构由angr提供
+def getCFG(path):
+    proj = angr.Project(path,load_options={'auto_load_libs':False})
+    return proj.analyses.CFGFast()
+
+def getMneSet(cfg):
+    result = set()
+    for node in cfg.graph.nodes:
+        if node.block:
+            for insn in node.block.capstone.insns:
+                mne = insn.mnemonic
+                result.add(mne)
+    return result
+
+class blockinfo():
+    def __init__(self) -> None:
+        self.tokens = [] # 统计词频计算权重 需要
+        self.id = None # >=0 Bin1和Bin2的所有块的id不会重复
+        self.total_insns = 0   # num of instructions
+        self.opcodeCount = {} # opcode:num
+# 处理统计块信息
+# 返回 ( [blockinfo], insToBlockCounts)
+# 处理 邻居信息
+def processblock(cfgs: List[angr.analyses.cfg.cfg.CFG], offsetStrMapping, nodeID):
+    blockinfo_list = []
+    insToBlockCounts = {}
+    str_bid_list = []
+    for cfg in cfgs:
+        str2bid = {}
+        for node in cfg.graph.nodes:
+            # extract predecessors and successors
+            preds = [nodeID[i] for i in node.predecessors]
+            succs = [nodeID[i] for i in node.successors]
+            neighbors = [preds, succs]
+            per_block_neighbors_bids[nodeID[node]] = neighbors
+            # 处理块信息
+            bi = blockinfo()
+            bb: angr.block.Block = node.block
+            opcode_count = {}
+            if bb:
+                # self.tokens有用吗 没有去重
+                bi.total_insns = len(bb.capstone.insns)
+                for insn in bb.capstone.insns:
+                    opcode = insn.mnemonic
+                    opcode_set.add(opcode) # 先记录这个opcode
+                    if opcode not in opcode_count:
+                        opcode_count[opcode] = 0
+                        if opcode not in insToBlockCounts:
+                            insToBlockCounts[opcode] = 0
+                        insToBlockCounts[opcode] += 1
+                        
+                    opcode_count[opcode] += 1
+                    # str(insn.mnemonic)?
+                    bi.tokens.append(opcode)
+                    opStrs = insn.op_str.split(", ")
+                    for opstr in opStrs:
+                        optoken = normalization(opstr, offsetStrMapping)
+                    if optoken != '':
+                        bi.tokens.append(optoken)
+
+                    opstrNum = ""
+                    if opstr.startswith("0x") or opstr.startswith("0X"):
+                        opstrNum = str(int(opstr, 16))
+                    if opstrNum in offsetStrMapping:
+                        str2bid[offsetStrMapping[opstrNum]] = nodeID[node]
+
+            bi.opcodeCount = opcode_count
+            blockinfo_list.append(bi)
+        str_bid_list.append(str2bid)
+
+    return (blockinfo_list,insToBlockCounts,str2bid)

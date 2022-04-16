@@ -256,11 +256,6 @@ def get_k_neighbors(k=4):
                         k_preds.append(pred)
                     if pred not in curr_bids:
                         curr_bids.append(pred)
-            # print("curr_bids:", curr_bids)
-
-        
-        # print("preds:", k_hop_preds, "\n")
-
         # get k hop successors
         k_succs = []
         curr_bids.clear()
@@ -278,12 +273,6 @@ def get_k_neighbors(k=4):
                     if succ not in curr_bids:
                         curr_bids.append(succ)
 
-            # print("curr_bids:", curr_bids)
-
-        # print("succs:", k_hop_succs, "\n")
-
-        # k_hop_preds_dict[block_id] = k_preds
-        # k_hop_succs_dict[block_id] = k_succs
         k_hop_neighbors[block_id] = k_preds + k_succs
 
     return k_hop_neighbors#k_hop_preds_dict, k_hop_succs_dict
@@ -312,21 +301,13 @@ def k_hop_greedy_matching(k_hop_neighbors, sim_result, node_map, toBeMergedBlock
         matched_blocks.append(bid1)
         matched_blocks.append(toBeMergedBlocks[bid1])
 
-
     curr_pairs = matched_pairs.copy()
 
     while len(curr_pairs) != 0:
         curr_pair = curr_pairs.pop(0)
 
-        # preds1_ids = k_hop_preds_dict[curr_pair[0]]
-        # preds2_ids = k_hop_preds_dict[curr_pair[1]]
-        
-        # succs1_ids = k_hop_succs_dict[curr_pair[0]]
-        # succs2_ids = k_hop_succs_dict[curr_pair[1]]
-
         neighbor1_ids = k_hop_neighbors[curr_pair[0]]
         neighbor2_ids = k_hop_neighbors[curr_pair[1]]
-
 
         sims = {}
         for bid1 in neighbor1_ids:

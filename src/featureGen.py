@@ -34,53 +34,11 @@ debug = False
 
 # find the neighboring instructions based on current data_index
 # return []
-def getNeighboringInsn(article, opcode_idx_list, insnStartingIndices, indexToCurrentInsnsStart):
+def getNeighboringInsn(article, insnStartingIndices, indexToCurrentInsnsStart):
     # data_index will already be an index for block boundary
     # we can get the batch size by simplying check the position of data_index in blockBoundaryIdx
     global data_index
     global debug
-
-    # ib_len = len(insnBoundaries)
-    # insnPos = 0
-    # # if current token is in the first or last instruction in the block, it only has 1 neibhoring instruction, otherwise 2.
-    # # insnPos == 1 means only has one next instruction, 2 means has both prev and next instructions, 3 means ony has prev instruction
-    # if data_index < insnBoundaries[0]:
-    #     insnPos = 1
-    # elif data_index > insnBoundaries[ib_len - 1]:
-    #     insnPos = 2
-    # else:
-    #     insnPos = 3
-
-    
-    # # # each minibatch should contain 3 blocks (2 if we hit the beginning block or the ending block)
-    # insnNum = 0
-    # if data_index == 0:
-    #     insnNum = 2
-    # else:
-    #     for counter, value in enumerate(blockBoundaryIdx):
-    #         if value == (data_index - 1):
-    #             if counter == (len(blockBoundaryIdx) - 1):
-    #                 insnNum = 2
-    #             else:
-    #                 insnNum = 3
-    
-    # if insnPos == 0:
-    #     print("error in getting batch size")
-    #     exit
-    
-    # temp = data_index
-    # print("blockNum: ", insnPos)
-    # print("temp: ", temp, article[temp])
-    # batch_size = 0
-    # for counter, _ in enumerate(article[temp + 1:]):
-    #     currentIdx = counter + temp + 1
-    #     batch_size = batch_size + 1
-    #     if currentIdx in blockBoundaryIdx:
-    #         insnPos = insnPos -1
-    #     if insnPos == 0:
-    #         break
-    
-    # data_index = data_index + batch_size + 1
 
     if debug == True:
         print("current data_index: ", data_index)
@@ -102,11 +60,9 @@ def getNeighboringInsn(article, opcode_idx_list, insnStartingIndices, indexToCur
 
     return currentInsnStart
 
-
-
 # generate minibatches for a given random walk.
 # consider one instruction before and one instruction after as the context for each token 
-def generate_batch(article, blockBoundaryIdx, insnStartingIndices, indexToCurrentInsnsStart, opcode_idx_list):
+def generate_batch(article, blockBoundaryIdx, insnStartingIndices, indexToCurrentInsnsStart):
     global data_index
     global batch_size
     global random_walk_done
@@ -124,7 +80,7 @@ def generate_batch(article, blockBoundaryIdx, insnStartingIndices, indexToCurren
     context = np.full((batch_size, 2, 5), -1) # ??
 
     for i in range(batch_size):
-        currentInsnStart = getNeighboringInsn(article, opcode_idx_list, insnStartingIndices, indexToCurrentInsnsStart)
+        currentInsnStart = getNeighboringInsn(article, insnStartingIndices, indexToCurrentInsnsStart)
         target[i, 0] = article[data_index]
 
         prevInsnStart = -1
@@ -143,7 +99,6 @@ def generate_batch(article, blockBoundaryIdx, insnStartingIndices, indexToCurren
             
             if prevInsnStart != -1:
                 prevInsnEnd = insnStartingIndices[currentInsnStart] - 1
-
 
             if nextInsnStart != -1:
                 if nextInsnStart == insnStartingIndices[len(insnStartingIndices) - 1]:
@@ -177,7 +132,6 @@ def generate_batch(article, blockBoundaryIdx, insnStartingIndices, indexToCurren
                 context[i, 1, j + 1]  = article[nextInsnStart + j]
         else:
             context[i, 1, 0] = 0
-
 
     return context, target 
 
@@ -213,8 +167,8 @@ def cal_insn_embedding(embeddings, insn, insn_size):
     # insn_embedding = tf.add(insn_opcode, insn_operand)
     return insn_embedding
 
-
-def buildAndTraining(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary, opcode_idx_list):
+# 有必要传dictionary吗? 直接传len?
+def buildAndTraining(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary):
     global data_index
     global random_walk_done
 
@@ -302,7 +256,7 @@ def buildAndTraining(article, blockBoundaryIndex, insnStartingIndices, indexToCu
 
         average_loss = 0
         for step in range(num_steps):
-            context, target = generate_batch(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, opcode_idx_list)
+            context, target = generate_batch(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart)
             feed_dict = {train_inputs: context, train_labels: target}
 
             # We perform one update step by evaluating the optimizer op (including it
@@ -321,6 +275,6 @@ def buildAndTraining(article, blockBoundaryIndex, insnStartingIndices, indexToCu
     return final_embeddings
 
 
-def tokenEmbeddingGeneration(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary, reversed_dictionary, opcode_idx_list):
-    embeddings = buildAndTraining(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary, opcode_idx_list)
+def tokenEmbeddingGeneration(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary):
+    embeddings = buildAndTraining(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary)
     return embeddings

@@ -3,6 +3,7 @@ import math
 
 from shutil import copyfile
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from typing import List
 
 import matching_driver
 import featureGen
@@ -14,42 +15,47 @@ import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 import numpy as np
 
+# 管理token 编号
+class Dictionary:
+    def __init__(self) -> None:
+        self.tokens = set()
+        self.reverse_dictionary = None
+    def update(self, tokens):
+        if isinstance(self.tokens,set):
+            self.tokens.update(tokens)
+        else:
+            raise Exception('unable to update after toIndex()')
+    def toIndex(self):
+        self.tokens = list(self.tokens) # 转为列表是为了方便索引访问
+        self.reverse_dictionary = dict(zip(self.tokens,range(len(self.tokens))))
+    
+    def __len__(self):
+        return len(self.tokens)
 
-# this list contains all the indices of the opcode in opcode_list
-opcode_idx_list = []
 
-
-# boundaryIdx = -1
+# 构建字典 返回 set
+def genDictionary(blockinfo_list: List[preprocessing.blockinfo]) -> Dictionary:
+    res = Dictionary()
+    for binfo in blockinfo_list:
+        res.update(binfo.tokens)
+    res.toIndex() # 生成索引后不可再更新
+    return res
 
 # blockIdxToTokens: blockIdxToTokens[block index] = token list
 # return dictionary: index to token, reversed_dictionary: token to index
 # 统计所有的token 然后编个号
+# vocabulary 统计词频 允许有重复的token
+# dictionary 无重复
 # token仅仅只是一个字符串 reg8 mov imme 等等
-def vocBuild(blockIdxToTokens):
-    global opcode_idx_list
-    vocabulary = []
-    reversed_dictionary = dict()
-    count = [['UNK'], -1]
-    index = 0
-    for idx in blockIdxToTokens:
-        for token in blockIdxToTokens[idx]:
-            vocabulary.append(token)
-            if token not in reversed_dictionary:
-                reversed_dictionary[token] = index
-                if token in preprocessing.opcode_list and index not in opcode_idx_list:
-                    opcode_idx_list.append(index)
-                    # print("token:", token, " has idx: ", str(index))
-                index = index + 1
-                
-    dictionary = dict(zip(reversed_dictionary.values(), reversed_dictionary.keys()))
-    count.extend(collections.Counter(vocabulary).most_common(1000 - 1))
-    print('20 most common tokens: ', count[:20])
-    return dictionary, reversed_dictionary
 
 
 # generate article for word2vec. put all random walks together into one article.
 # we put a tag between blocks
-def articlesGen(walks, blockIdxToTokens, reversed_dictionary):
+# article = walk || walk || ... || walk
+# walk = block || block || ... || block
+# block = token || token || ... || token
+# 最终存放的是token的id
+def articlesGen(walks, blockinfo_list: List[preprocessing.blockinfo], dictionary: Dictionary):
     # stores all the articles, each article itself is a list
     article = []
 
@@ -60,10 +66,10 @@ def articlesGen(walks, blockIdxToTokens, reversed_dictionary):
     for walk in walks:
         # one random walk is served as one article
         for idx in walk:
-            if idx in blockIdxToTokens:
-                tokens = blockIdxToTokens[idx]
-                for token in tokens:
-                    article.append(reversed_dictionary[token])
+            # idx should always <= len(blockinfo_list)
+            tokens = blockinfo_list[int(idx)].tokens
+            for token in tokens:
+                article.append(dictionary.reverse_dictionary[token])
             blockBoundaryIdx.append(len(article) - 1)
             # aritcle.append(boundaryIdx)
         
@@ -72,30 +78,31 @@ def articlesGen(walks, blockIdxToTokens, reversed_dictionary):
     # blockEnd + 1 so that we can traverse to blockEnd
     # go through the current block to retrive instruction starting indices
     for i in range(len(article)): 
-        if article[i] in opcode_idx_list:
+        if dictionary.tokens[int(article[i])] in preprocessing.opcode_set:
             insnStartingIndices.append(i)
         indexToCurrentInsnsStart[i] = len(insnStartingIndices) - 1
     return article, blockBoundaryIdx, insnStartingIndices, indexToCurrentInsnsStart
 
 
 # adopt TF-IDF method during block embedding calculation
-def cal_block_embeddings(blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, tokenEmbeddings, reversed_dictionary):
+def cal_block_embeddings(blockinfolist: List[preprocessing.blockinfo], insToBlockCounts, tokenEmbeddings, dictionary: Dictionary):
     block_embeddings = {}
-    totalBlockNum = len(blockIdxToOpcodeCounts)
+    totalBlockNum = len(blockinfolist)
 
-    for bid in blockIdxToTokens:
-        tokenlist = blockIdxToTokens[bid]
-        opcodeCounts = blockIdxToOpcodeCounts[bid]
-        opcodeNum = blockIdxToOpcodeNum[bid]
+    for bid in range(totalBlockNum):
+        binfo = blockinfolist[bid]
+        tokenlist = binfo.tokens
+        opcodeCounts = binfo.opcodeCount
+        opcodeNum = binfo.total_insns
 
         opcodeEmbeddings = []
         operandEmbeddings = []
 
         if len(tokenlist) != 0:
             for token in tokenlist:
-                tokenid = reversed_dictionary[token]
+                tokenid = dictionary.reverse_dictionary[token]
                 tokenEmbedding = tokenEmbeddings[tokenid]
-                if tokenid in opcode_idx_list and token in opcodeCounts:
+                if token in preprocessing.opcode_set and token in opcodeCounts:
                     # here we multiple the embedding with its TF-IDF weight if the token is an opcode
                     tf_weight = opcodeCounts[token] / opcodeNum
                     x = totalBlockNum / insToBlockCounts[token]
@@ -179,31 +186,34 @@ def main():
 
     # 第一步 预处理
     # step 1: perform preprocessing for the two binaries
-    blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, _, _, bin1_name, bin2_name, toBeMergedBlocks =\
-    preprocessing.preprocessing(filepath1, filepath2, outputDir)
-
+    # blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, toBeMergedBlocks =\
+    blockinfo_list, insnToBlockCounts, toBeMergedBlocks = preprocessing.preprocessing(filepath1, filepath2, outputDir)
+    
     # 第二部 词汇表构建
     #step 2: vocabulary buildup
     # blockIdxToTokens 块对应的Token列表 binary1 binar2的块混在一起 
-    dictionary, reversed_dictionary = vocBuild(blockIdxToTokens)
-
+    dictionary: Dictionary = genDictionary(blockinfo_list)
+    
     # 第三步 生成随机游走 每个随机游走包含特定的块
     # step 3: generate random walks, each walk contains certain blocks
-    walks = deepwalk.process(EDGELIST_FILE, blockIdxToTokens)
-
+    walks = deepwalk.process(EDGELIST_FILE)
+    
     # 第4步 基于随机游走生成文章
     # step 4: generate articles based on random walks
-    article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart = articlesGen(walks, blockIdxToTokens, reversed_dictionary)
+    article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart = articlesGen(walks, blockinfo_list, dictionary)
 
+    # 调用tf
     # step 5: token embedding generation
-    tokenEmbeddings = featureGen.tokenEmbeddingGeneration(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary, reversed_dictionary, opcode_idx_list)
-
+    tokenEmbeddings = featureGen.tokenEmbeddingGeneration(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary)
+    
     # step 6: calculate feature vector for blocks
-    block_embeddings = cal_block_embeddings(blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, tokenEmbeddings, reversed_dictionary)
+    block_embeddings = cal_block_embeddings(blockinfo_list, insnToBlockCounts, tokenEmbeddings, dictionary)
     feature_vec_file_gen(outputDir + 'features', block_embeddings) 
 
     copyEverythingOver(outputDir, 'data/DeepBD/')
 
+    bin1_name = preprocessing.path_leaf(filepath1)
+    bin2_name = preprocessing.path_leaf(filepath2)
     # step 7: TADW for block embedding generation & block matching
     matching_driver.pre_matching(bin1_name, bin2_name, toBeMergedBlocks)
 

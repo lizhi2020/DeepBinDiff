@@ -2,7 +2,6 @@ from typing import Dict, List
 import angr
 import os
 import ntpath
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 # this list contains all the opcode in the two binaries
 opcode_set = set()
@@ -291,6 +290,16 @@ def nodeFeaturesGen(nodelist1, nodelist2, mneList, mneDic, constDic, offsetStrMa
                 feaVecFile.write(str(feaVec[k]) + " ")
             feaVecFile.write("\n")
 
+
+# 输出 output/nodeIndexToCode 文件
+def writeNodeFile(nodelist1:List,nodelist2:List,dst):
+    with open(dst,'w') as file:
+        file.write(str(len(nodelist1))+" "+str(len(nodelist2))+"\n")
+        for index,node in enumerate(nodelist1+nodelist2):
+            if node.block:
+                file.write(str(index)+':\n')
+                file.write(str(node.block.capstone.insns)+'\n\n')
+
 # preprocessing the two binaries with Angr. try to creat outputdir if it doesn't exist
 def preprocessing(filepath1, filepath2, outputDir):
     binary1 = path_leaf(filepath1)
@@ -299,7 +308,6 @@ def preprocessing(filepath1, filepath2, outputDir):
     if not os.path.exists(outputDir):
         os.makedirs(outputDir)
 
-    # cfg1, cg1, nodelist1, edgelist1, cfg2, cg2, nodelist2, edgelist2 = angrGraphGen(filepath1, filepath2)
     cfg1 = getCFG(filepath1)
     cfg2 = getCFG(filepath2)
 
@@ -312,6 +320,8 @@ def preprocessing(filepath1, filepath2, outputDir):
     # 注意 nodeID与blockinf_list的索引是对应的。对一个node 其id为nodeID[node] 其blockinfo = blockinfo_list[id]
     # todo opt
     nodeID = GenNodeID([cfg1,cfg2])
+
+    writeNodeFile(nodelist1,nodelist2,os.path.join(outputDir,'nodeIndexToCode'))
     # 相同的偏移包含不同的字符串？
     offstrmap, externFuncNamesBin1 = getOffsetStrMap(cfg1,binary1)
     tmpmap, externFuncNamesBin2 = getOffsetStrMap(cfg2,binary2)

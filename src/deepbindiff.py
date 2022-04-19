@@ -155,6 +155,10 @@ def copyEverythingOver(src_dir, dst_dir):
     #functionInfo = 'functionIndexToCode'
     nodeInfo = 'nodeIndexToCode'
 
+    import os
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
+
     #copyfile('/home/yueduan/yueduan/groundTruthCollection/output/' + ground_truth, dst_dir + ground_truth)
     # copyfile(src_dir + ground_truth, dst_dir + ground_truth)
     copyfile(src_dir + node_features, dst_dir + node_features)

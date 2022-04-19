@@ -1,3 +1,5 @@
+*这不是DeepBindDiff的官方仓库，本仓库在原仓库的基础上进行改进和优化*
+
 # DeepBinDiff
 
 This is the official repository for DeepBinDiff, which is a fine-grained binary diffing tool for x86 binaries. We will actively update it.

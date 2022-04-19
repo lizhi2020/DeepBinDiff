@@ -32,34 +32,6 @@ random_walk_done = False
 
 debug = False
 
-# find the neighboring instructions based on current data_index
-# return []
-def getNeighboringInsn(article, insnStartingIndices, indexToCurrentInsnsStart):
-    # data_index will already be an index for block boundary
-    # we can get the batch size by simplying check the position of data_index in blockBoundaryIdx
-    global data_index
-    global debug
-
-    if debug == True:
-        print("current data_index: ", data_index)
-    
-    # find the insn boundary for current token
-    currentInsnStart = -1
-    
-    if data_index in indexToCurrentInsnsStart:
-        currentInsnStart = indexToCurrentInsnsStart[data_index]
-    else:
-        if data_index <= len(article) - 1:
-            currentInsnStart = len(insnStartingIndices) - 1
-        else:
-            print("error in getting current instruction starting index!")
-            raise SystemExit
-
-    if debug == True:
-        print("currentInsnStart: ", currentInsnStart)
-
-    return currentInsnStart
-
 # generate minibatches for a given random walk.
 # consider one instruction before and one instruction after as the context for each token 
 def generate_batch(article, blockBoundaryIdx, insnStartingIndices, indexToCurrentInsnsStart):
@@ -75,12 +47,12 @@ def generate_batch(article, blockBoundaryIdx, insnStartingIndices, indexToCurren
 
     # each instructin can have almost one opcode and three operands
     # labels_new[i, 0, 0], labels_new[i, 1, 0] are the numbers of token in the instruction
-
-    context = np.ndarray(shape=(batch_size, 2, 5), dtype=np.int32)
     context = np.full((batch_size, 2, 5), -1) # ??
 
     for i in range(batch_size):
-        currentInsnStart = getNeighboringInsn(article, insnStartingIndices, indexToCurrentInsnsStart)
+        # indexToCurrentInsnsStart 长度应当与article保持一致
+        # data_index应当一直是有效的索引
+        currentInsnStart = indexToCurrentInsnsStart[data_index]
         target[i, 0] = article[data_index]
 
         prevInsnStart = -1
@@ -106,16 +78,9 @@ def generate_batch(article, blockBoundaryIdx, insnStartingIndices, indexToCurren
                 else:
                     nextInsnEnd = insnStartingIndices[currentInsnStart + 2] - 1
 
-        if debug == True:
-            print("prevInsnStart: ", prevInsnStart)
-            print("prevInsnEnd: ", prevInsnEnd)
-            print("nextInsnStart: ", nextInsnStart)
-            print("nextInsnEnd: ", nextInsnEnd, "\n")
-
         next_index = (data_index + 1) % article_size
-
         if next_index <= data_index:
-            random_walk_done = True
+            random_walk_done = True # ？
         data_index = next_index
 
         if prevInsnStart != -1:
@@ -148,9 +113,9 @@ def get_insns_token_embeddings(embeddings, insn):
 #     return tf.random_uniform([embedding_size], -1.0, 1.0)
 
 
-def cal_operand_embedding(insnToken_embeddings, insn_opcode):
+def cal_operand_embedding(insnToken_embeddings):
     size = tf.to_float(tf.size(insnToken_embeddings))
-    operand_embedding = tf.subtract(tf.div(tf.reduce_sum(insnToken_embeddings, 0), size), tf.div(insn_opcode, size))
+    operand_embedding = tf.subtract(tf.div(tf.reduce_sum(insnToken_embeddings, 0), size), tf.div(insnToken_embeddings[0], size))
     return operand_embedding
 
 
@@ -161,7 +126,7 @@ def cal_insn_embedding(embeddings, insn, insn_size):
     has_no_operand = tf.equal(insn_size, tf.Variable(1))
     insn_operand = tf.cond(has_no_operand, 
         true_fn=lambda: tf.zeros([embedding_size]), 
-        false_fn=lambda: cal_operand_embedding(insnToken_embeddings, insn_opcode))
+        false_fn=lambda: cal_operand_embedding(insnToken_embeddings))
 
     insn_embedding = tf.concat([insn_opcode, insn_operand], 0)
     # insn_embedding = tf.add(insn_opcode, insn_operand)

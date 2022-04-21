@@ -1,10 +1,8 @@
 import numpy as np
 import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
 import re
-from scipy import spatial
 import operator
-import lapjv
+import lapjv,logging
 import preprocessing
 
 
@@ -14,20 +12,9 @@ matching_threshold = 0.6
 def ebd_file_to_dic(embedding_file):
     ebd_list = np.loadtxt(embedding_file)
     ebd_dic = {}
-    feature_dim = len(ebd_list[0]) - 1
     for ebd in ebd_list:
         ebd_dic[int(ebd[0])] = ebd[1:]
-    return ebd_dic, feature_dim
-
-
-# similarity function cosine as default
-def similarity(mat_a, mat_b):
-    mul = np.dot(mat_a, mat_b.T)
-    na = np.linalg.norm(mat_a, axis=1, keepdims=True)
-    nb = np.linalg.norm(mat_b, axis=1, keepdims=True)
-    result = mul / np.dot(na, nb.T)
-    return result
-
+    return ebd_dic
 
 # similarity function, GPU speed up
 def similarity_gpu(mat_a, mat_b):
@@ -39,7 +26,6 @@ def similarity_gpu(mat_a, mat_b):
     result =  mul / tf.matmul(na, nb, transpose_b=True)
     with tf.Session() as sess:
         return sess.run(result, feed_dict={funca: mat_a, funcb: mat_b})
-
 
 def merge(vec_list, method='sum'):
     def vec_max(vec_list):
@@ -152,13 +138,15 @@ def readNodeInfo(node2addr_file):
 
 
 # This function matches functions and further matches basic blocks inside function pairs
+# node_in_bin1: int
+# edb_dic: (node_num, embed_dim)
+# sim_result: (node_num1, node_num2)
+# node_map: nodeid -> bin_mat_index
 def matching(node_in_bin1, ebd_dic, sim_result, node_map, toBeMergedBlocks):
-    # matchBBs(bin1_nonimported_funcs, bin2_nonimported_funcs, matchFuncs(bin1_nonimported_funcs, bin2_nonimported_funcs, func_ebd_dic, sim_result, func_map), matches_list, sim_result, node_map)
 
     # get k hop neighbors and perform greedy matching algorithm
     k_hop_neighbors = get_k_neighbors()
     matched_pairs, matched_blocks = k_hop_greedy_matching(k_hop_neighbors, sim_result, node_map, toBeMergedBlocks)
-
     #perform linear assignment for the unmatched blocks
     non_matched_bin1 = []
     non_matched_bin2 = []
@@ -211,12 +199,7 @@ def matching(node_in_bin1, ebd_dic, sim_result, node_map, toBeMergedBlocks):
             match_bb1 = k
         if mapping[k] < len(non_matched_bin2):
             match_bb2 = mapping[k]
-    
-        # if match_bb1 == -1:
-        #     print("Node: {} is inserted".format(nonimported_to_global_dict_2[match_bb2]))
-        # elif match_bb2 == -1:
-        #     print("Node: {} is deleted".format(nonimported_to_global_dict_1[match_bb1]))
-        # else:
+
         if match_bb1 != -1 and match_bb2 != -1:
             bb_matching_pair.append([match_bb1, match_bb2])
 
@@ -226,14 +209,8 @@ def matching(node_in_bin1, ebd_dic, sim_result, node_map, toBeMergedBlocks):
     return matched_pairs, inserted, deleted
 
 
-
-
-
-
 # get the k-hop neighbors in the CFG for every block (bid)
 def get_k_neighbors(k=4):
-    # k_hop_preds_dict = {}
-    # k_hop_succs_dict = {}
     k_hop_neighbors = {}
     
     for block_id in preprocessing.per_block_neighbors_bids:
@@ -273,8 +250,7 @@ def get_k_neighbors(k=4):
                         curr_bids.append(succ)
 
         k_hop_neighbors[block_id] = k_preds + k_succs
-
-    return k_hop_neighbors#k_hop_preds_dict, k_hop_succs_dict
+    return k_hop_neighbors
 
 
 def find_max_unmatched_pair(sims, matched_blocks):
@@ -316,16 +292,6 @@ def k_hop_greedy_matching(k_hop_neighbors, sim_result, node_map, toBeMergedBlock
                     sims[bid_pair] = 0
                 else:
                     sims[bid_pair] = sim_result[node_map[str(bid1)], node_map[str(bid2)]]
-        
-        # for bid1 in succs1_ids:
-        #     for bid2 in succs2_ids:
-        #         bid_pair = (bid1, bid2)
-        #         if bid1 in preprocessing.non_code_block_ids or bid2 in preprocessing.non_code_block_ids:
-        #             sims[bid_pair] = 0
-        #         else:
-        #             sims[bid_pair] = sim_result[node_map[str(bid1)], node_map[str(bid2)]]
-
-
 
         maxpair = find_max_unmatched_pair(sims, matched_blocks)
 
@@ -335,31 +301,10 @@ def k_hop_greedy_matching(k_hop_neighbors, sim_result, node_map, toBeMergedBlock
         matched_pairs.append(maxpair)
         matched_blocks.append(maxpair[0])
         matched_blocks.append(maxpair[1])
+        logging.debug(f'curr {curr_pair} max {maxpair}')
         curr_pairs.append(maxpair)
         curr_pairs.append(curr_pair)
-
     return matched_pairs, matched_blocks
-
-
-# Greedy version
-# def matchFuncs(bin1_nonimported_funcs, bin2_nonimported_funcs, func_ebd_dic, sim_result, func_map):
-#     function_matching_pair = []
-#     for func1 in bin1_nonimported_funcs.items():
-#         func_result_list = {}
-#         for func2 in bin2_nonimported_funcs.items():
-#             if (func1[1]['blocks'] != None) and (func2[1]['blocks'] != None) and (func1[1]['import'] != True) and (func2[1]['import'] != True):
-#                 sim = sim_result[func_map[str(func1[0])], func_map[str(func2[0])]]
-#                 func_result_list[str(func1[0]) + ' ' + str(func2[0])] =  sim
-#                 if func1[1]['name'] == 'put_indicator':
-#                     if func2[1]['name'] == 'put_indicator':
-#                         print("xjtu")
-#                     print("func in bin1: {}\nfunc in bin2: {}\nhas similarity: {}\n\n".format(func1, func2, sim))
-#         sorted_list = sorted(func_result_list.items(), key=lambda item:item[1])
-#         if len(sorted_list):
-#             match_func1, match_func2 = sorted_list[-1][0].split()
-#             # print("match: {} and {}".format(bin1_nonimported_funcs[int(match_func1)], bin2_nonimported_funcs[int(match_func2)]))
-#             function_matching_pair.append([int(match_func1), int(match_func2)])
-#     return function_matching_pair
 
 
 # Linear assignment version
@@ -388,12 +333,6 @@ def matchFuncs(bin1_nonimported_funcs, bin2_nonimported_funcs, func_ebd_dic, sim
                 cost_array[func1[0]][func2[0] - len(bin1_nonimported_funcs)] = 1 - sim
         sorted_x = sorted(func_sim_list.items(), key=operator.itemgetter(1))
         sorted_x.reverse()
-        # if func1[1]['name'] == 'version_etc_va':
-        # print("sort {}\n\n\n".format(func1[1]['name']))
-        # for f2n in sorted_x:
-        #     for func2 in bin2_nonimported_funcs.items():
-        #         if func2[1]['name'] == f2n[0]:
-        #             print("func in bin1: {}\nfunc in bin2: {}\nsimilarity: {}\n\n".format(func1, func2, f2n[1]))
 
         
     mapping = linearAssignment(cost_array)

@@ -1,46 +1,21 @@
-import sys
 import os
 import numpy as np
-# from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import utility
-# import time
-
-import preprocessing
-
-
-if sys.platform != "win32":
-    embedding_file = "./vec_all"
-    func_embedding_file = "./func_vec_all"
-    node2addr_file = "./data/DeepBD/nodeIndexToCode"
-    func2addr_file = "./data/DeepBD/functionIndexToCode"
-    bin_edgelist_file = "./data/DeepBD/edgelist"
-    bin_features_file = "./data/DeepBD/features"
-    func_features_file = "./data/DeepBD/func.features"
-    ground_truth_file = "./data/DeepBD/addrMapping"
-else:
-    embedding_file = ".\\vec_all"
-    func_embedding_file = ".\\func_vec_all"
-    node2addr_file = ".\\data\\DeepBD\\nodeIndexToCode"
-    func2addr_file = ".\\data\\DeepBD\\functionIndexToCode"
-    bin_edgelist_file = ".\\data\\DeepBD\\edgelist"
-    bin_features_file = ".\\data\\DeepBD\\features"
-    func_features_file = ".\\data\\DeepBD\\func.features"
-    ground_truth_file = ".\\data\\DeepBD\\addrMapping"
+import config
+import tensorflow
+from config import dbdlogger
 
 # whether use deepwalk to create embeddings for each function or not 
 # Set to false as default, which can get better result for now.
 EBD_CALL_GRAPH = False 
 
-
-def pre_matching(bin1_name, bin2_name, toBeMergedBlocks={}):
-    # if sys.platform != "win32":
-    # !!
-    tadw_command = "python ./src/performTADW.py --method tadw --input " + bin_edgelist_file + " --graph-format edgelist --feature-file " + bin_features_file + " --output vec_all"
+def pre_matching(toBeMergedBlocks={}):
+    # !!python3
+    tadw_command = "python ./src/performTADW.py --method tadw --input " + config.file.edgelist_file + " --graph-format edgelist --feature-file " + config.file.features_file + " --output "+config.file.embedding_file
     os.system(tadw_command)
     
-    ebd_dic, _ = utility.ebd_file_to_dic(embedding_file)
-    node_in_bin1, _node_in_bin2 = utility.readNodeInfo(node2addr_file)
-    
+    ebd_dic = utility.ebd_file_to_dic(config.file.embedding_file)
+    node_in_bin1, _node_in_bin2 = utility.readNodeInfo(config.file.node_file)
     
     bin1_mat = []
     bin2_mat = []
@@ -53,29 +28,12 @@ def pre_matching(bin1_name, bin2_name, toBeMergedBlocks={}):
             bin2_mat.append(line)
             node_map[str(idx)] = len(bin2_mat) - 1
 
+    bin1_mat = np.array(bin1_mat,dtype=np.float32)
+    bin2_mat = np.array(bin2_mat,dtype=np.float32)
 
-    bin1_mat = np.array(bin1_mat)
-    bin2_mat = np.array(bin2_mat)
+    tensorflow.compat.v1.disable_eager_execution()
+    dbdlogger.info('disable eager execution')
     sim_result = utility.similarity_gpu(bin1_mat, bin2_mat)
-    
-    print("Perform matching...")
+    dbdlogger.info(f'preform matching: to be merged {len(toBeMergedBlocks)}')
     matched_pairs, inserted, deleted = utility.matching(node_in_bin1, ebd_dic, sim_result, node_map, toBeMergedBlocks)
-
-    print("matched pairs: ")
-    print(matched_pairs)
-
-    # print("Inserted blocks: ")
-    # print(inserted)
-
-    # print("Deleted blocks: ")
-    # print(deleted)
-
-   
-
-
-# if __name__ == '__main__' :
-#     # here is cross-platform configurations. 
-#     # actually I can do this in more elegant way, but it is enough for testing.
-    
-#     # np.set_printoptions(threshold=np.inf, suppress=True)  # set numpy options
-#     sys.exit(two_level_matching('yes_830_o1', 'yes_830_o3'))
+    dbdlogger.info(f'matched pairs: {matched_pairs}')

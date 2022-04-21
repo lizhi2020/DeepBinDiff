@@ -2,6 +2,7 @@ from typing import Dict, List
 import angr
 import os
 import ntpath
+import config
 
 # this list contains all the opcode in the two binaries
 opcode_set = set()
@@ -191,7 +192,8 @@ def functionIndexToCodeGen(cfg1, cg1, nodelist1, nodeDic1, cfg2, cg2, nodelist2,
 # 这里写 output/edgelist
 # This function generates super CFG edge list. We also replace external function blocks in binary 2 from block in binary 1
 def edgeListGen(edgelist1, edgelist2, nodeID, toBeMergedReverse, outputDir):
-    with open(outputDir + 'edgelist_merged_tadw', 'w') as edgelistFile:
+    path = os.path.join(outputDir,'edgelist_merged_tadw')
+    with open(path, 'w') as edgelistFile:
         for (src, tgt) in edgelist1:
             edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
         for (src, tgt) in edgelist2:
@@ -207,8 +209,8 @@ def edgeListGen(edgelist1, edgelist2, nodeID, toBeMergedReverse, outputDir):
                 new_tgt_id = toBeMergedReverse[tgt_id]
 
             edgelistFile.write(str(new_src_id) + " " + str(new_tgt_id) + "\n")
-
-    with open(outputDir + 'edgelist', 'w') as edgelistFile:
+    path = config.file.edgelist_file
+    with open(path, 'w') as edgelistFile:
         for (src, tgt) in edgelist1:
             edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
         for (src, tgt) in edgelist2:
@@ -321,7 +323,7 @@ def preprocessing(filepath1, filepath2, outputDir):
     # todo opt
     nodeID = GenNodeID([cfg1,cfg2])
 
-    writeNodeFile(nodelist1,nodelist2,os.path.join(outputDir,'nodeIndexToCode'))
+    writeNodeFile(nodelist1,nodelist2,config.file.node_file)
     # 相同的偏移包含不同的字符串？
     offstrmap, externFuncNamesBin1 = getOffsetStrMap(cfg1,binary1)
     tmpmap, externFuncNamesBin2 = getOffsetStrMap(cfg2,binary2)

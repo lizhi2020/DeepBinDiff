@@ -1,6 +1,6 @@
-import collections
-import math
-
+import json,config
+import math, os, logging
+import tempfile
 from shutil import copyfile
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from typing import List
@@ -10,9 +10,6 @@ import featureGen
 import preprocessing
 from deepwalk import deepwalk
 
-
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
 import numpy as np
 
 # 管理token 编号
@@ -57,11 +54,7 @@ def genDictionary(blockinfo_list: List[preprocessing.blockinfo]) -> Dictionary:
 # 最终存放的是token的id
 def articlesGen(walks, blockinfo_list: List[preprocessing.blockinfo], dictionary: Dictionary):
     # stores all the articles, each article itself is a list
-    article = []
-
-    # stores all the block boundary indice. blockBoundaryIndices[i] is a list to store indices for articles[i].
-    # each item stores the index for the last token in the block
-    blockBoundaryIdx = []
+    article = [0,0,0,0]
     
     for walk in walks:
         # one random walk is served as one article
@@ -70,18 +63,17 @@ def articlesGen(walks, blockinfo_list: List[preprocessing.blockinfo], dictionary
             tokens = blockinfo_list[int(idx)].tokens
             for token in tokens:
                 article.append(dictionary.reverse_dictionary[token])
-            blockBoundaryIdx.append(len(article) - 1)
-            # aritcle.append(boundaryIdx)
         
-    insnStartingIndices = []
-    indexToCurrentInsnsStart = {}
-    # blockEnd + 1 so that we can traverse to blockEnd
-    # go through the current block to retrive instruction starting indices
-    for i in range(len(article)): 
+    insnStartingIndices = [0]
+    for i in range(4,len(article)): 
         if dictionary.tokens[int(article[i])] in preprocessing.opcode_set:
             insnStartingIndices.append(i)
-        indexToCurrentInsnsStart[i] = len(insnStartingIndices) - 1
-    return article, blockBoundaryIdx, insnStartingIndices, indexToCurrentInsnsStart
+    assert insnStartingIndices[1] == 4
+    article.append(0)
+    tmp=len(article)-1
+    insnStartingIndices += [tmp,tmp]
+    # 这样前后一共加了3个指令
+    return article, insnStartingIndices
 
 
 # adopt TF-IDF method during block embedding calculation
@@ -159,12 +151,8 @@ def copyEverythingOver(src_dir, dst_dir):
     if not os.path.exists(dst_dir):
         os.makedirs(dst_dir)
 
-    #copyfile('/home/yueduan/yueduan/groundTruthCollection/output/' + ground_truth, dst_dir + ground_truth)
-    # copyfile(src_dir + ground_truth, dst_dir + ground_truth)
     copyfile(src_dir + node_features, dst_dir + node_features)
     copyfile(src_dir + cfg_edgelist, dst_dir + 'edgelist')
-    #copyfile(src_dir + func_edgelist, dst_dir + func_edgelist)
-    #copyfile(src_dir + functionInfo, dst_dir + functionInfo)
     copyfile(src_dir + nodeInfo, dst_dir + nodeInfo)
 
     #Yue: use feature as embedding
@@ -183,44 +171,83 @@ def main():
     filepath2 = args.input2
     outputDir = args.outputDir
 
-    if outputDir.endswith('/') is False:
-        outputDir = outputDir + '/'
+    if outputDir:
+        config.file.update(outputDir)
+    else:
+        tdir = tempfile.mkdtemp()
+        config.file.update(tdir)
 
-    EDGELIST_FILE = outputDir + "edgelist"
+    dbdlogger = logging.getLogger(config.logger_name)
 
-    # 第一步 预处理
-    # step 1: perform preprocessing for the two binaries
-    # blockIdxToTokens, blockIdxToOpcodeNum, blockIdxToOpcodeCounts, insToBlockCounts, toBeMergedBlocks =\
+    dbdlogger.info(config.file.output)
+
     blockinfo_list, insnToBlockCounts, toBeMergedBlocks = preprocessing.preprocessing(filepath1, filepath2, outputDir)
-    
-    # 第二部 词汇表构建
-    #step 2: vocabulary buildup
-    # blockIdxToTokens 块对应的Token列表 binary1 binar2的块混在一起 
+ 
+    # 是否要考虑词频排序
     dictionary: Dictionary = genDictionary(blockinfo_list)
-    
-    # 第三步 生成随机游走 每个随机游走包含特定的块
-    # step 3: generate random walks, each walk contains certain blocks
-    walks = deepwalk.process(EDGELIST_FILE)
-    
-    # 第4步 基于随机游走生成文章
-    # step 4: generate articles based on random walks
-    article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart = articlesGen(walks, blockinfo_list, dictionary)
 
-    # 调用tf
-    # step 5: token embedding generation
-    tokenEmbeddings = featureGen.tokenEmbeddingGeneration(article, blockBoundaryIndex, insnStartingIndices, indexToCurrentInsnsStart, dictionary)
+    walks = deepwalk.process(config.file.edgelist_file)
     
-    # step 6: calculate feature vector for blocks
+    article = Article(walks,blockinfo_list,dictionary)
+
+    article.generate_batch_to_file()
+    
+    tokenEmbeddings = featureGen.generate_token_embeddings(article,len(dictionary))
+
     block_embeddings = cal_block_embeddings(blockinfo_list, insnToBlockCounts, tokenEmbeddings, dictionary)
-    feature_vec_file_gen(outputDir + 'features', block_embeddings) 
+    feature_vec_file_gen(config.file.features_file, block_embeddings) 
 
-    copyEverythingOver(outputDir, 'data/DeepBD/')
+    matching_driver.pre_matching(toBeMergedBlocks)
 
-    bin1_name = preprocessing.path_leaf(filepath1)
-    bin2_name = preprocessing.path_leaf(filepath2)
-    # step 7: TADW for block embedding generation & block matching
-    matching_driver.pre_matching(bin1_name, bin2_name, toBeMergedBlocks)
 
+# 生成文章，生成batch数据
+class Article:
+    def __init__(self,walks, blockinfos, dictonary):
+        self.data_index = 4
+        self.insn_index = 1
+        self.article, self.insns = articlesGen(walks,blockinfos,dictonary)
+        self.limit = len(self.insns)-3
+
+    # (context(2,5),target)
+    def one(self):
+        context = [[0 for _ in range(4)] for _ in range(2)]
+        iid = self.insn_index
+
+        for i,token in enumerate(self.article[self.insns[iid-1]:self.insns[iid]]):
+            assert i<4
+            context[0][i]=token
+        for i,token in enumerate(self.article[self.insns[iid+1]:self.insns[iid+2]]):
+            assert i<4
+            context[1][i]=token
+        res=(context,self.article[self.data_index])
+
+        self.data_index+=1
+        if self.data_index == self.insns[iid+1]:
+            self.insn_index+=1
+        
+        if self.insn_index > self.limit:
+            self.insn_index=1
+            self.data_index=4
+        
+        return res
+    
+    # ([context(2,5)],[target])
+    def batch(self, num):
+        context = []
+        target = []
+        for _ in range(num):
+            a,b=self.one()
+            context.append(a)
+            target.append(b)
+        return (context,target)
+
+    def generate_batch_to_file(self):
+        batches = []
+        for i in range(100):
+            batches.append(self.batch(config.batch_size))
+        fp = open('batches.txt','w')
+        json.dump(batches,fp)
+        fp.close()
 
 if __name__ == "__main__":
     main()

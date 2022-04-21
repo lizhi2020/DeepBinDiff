@@ -28,25 +28,6 @@ def ebd_file_to_dic(inputfile):
 
 
 def match(node_in_bin1, node_in_bin2, matches_list, ebd_dic):#, idx_x):
-    # result_dict = {}
-    # for idx_y in range(node_in_bin1, node_in_bin1 + node_in_bin2):  
-    #     if idx_x in ebd_dic and idx_y in ebd_dic:
-    #         sim = similarity(ebd_dic[idx_x], ebd_dic[idx_y])
-    #         result_dict[str(idx_x) + ' ' + str(idx_y)] =  sim
-    # sorted_list = sorted(result_dict.items(), key=lambda item:item[1])
-    # length = len(sorted_list)
-    # # print(sorted_list)
-    # for pos, tpl in enumerate(sorted_list):
-    #     pair = tpl[0].split()
-    #     pair = list(map(int, pair))
-    #     # if pos >= length - 5:
-    #         # print("high rank:", int(pair[0]), "==", int(pair[1]), "score:", tpl[1], "rank:", length - pos)
-    #     if pair in matches_list:
-    #         # print("----------------------------------------")
-    #         with open("matchResult.txt", 'a') as f:
-    #             # print("ground truth:", int(pair[0]), "==", int(pair[1]), "score:", tpl[1], "rank:", length - pos)
-    #             f.write("ground truth: {} == {}, score: {}, rank: {}\n".format(int(pair[0]),int(pair[1]), tpl[1], (length - pos)))
-    #         # print("----------------------------------------")
     cost_array = []
     maxNumber = max(node_in_bin1, node_in_bin2)
     for idx_x in range(maxNumber):
@@ -64,7 +45,6 @@ def match(node_in_bin1, node_in_bin2, matches_list, ebd_dic):#, idx_x):
                 sim = 0
             result_dict[str(idx_x) + ' ' + str(idx_y)] = sim
             cost_array[idx_x][idx_y - node_in_bin1] = 1 - sim
-
 
     cost_matrix = np.array([np.array(xi) for xi in cost_array], dtype=np.float32)
 
@@ -201,20 +181,5 @@ def main(argv=None):
 
 
 if __name__ == '__main__' :
-    # here is cross-platform configurations. 
-    # actually I can do this in more elegant way, but it is enough for testing.
-    if sys.platform != "win32":
-        embedding_file = "./vec_all.txt"
-        node2addr_file = "./data/DeepBD/nodeIndexToCode"
-        bin_edgelist = "./data/DeepBD/cal_edgelist.txt"
-        bin_features = "./data/DeepBD/cal.features"
-        ground_truth = "./data/DeepBD/addrMapping"
-
-    else:
-        embedding_file = ".\\vec_all.txt"
-        node2addr_file = ".\\data\\DeepBD\\nodeIndexToCode"
-        bin_edgelist = ".\\data\\DeepBD\\cal_edgelist.txt"
-        bin_features = ".\\data\\DeepBD\\cal.features"
-        ground_truth = ".\\data\\DeepBD\\addrMapping"
     np.set_printoptions(threshold=np.inf, suppress=True)  # set numpy options
     sys.exit(main(sys.argv[1:]))

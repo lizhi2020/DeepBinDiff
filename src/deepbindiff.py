@@ -121,7 +121,6 @@ def cal_block_embeddings(blockinfolist: List[preprocessing.blockinfo], insToBloc
         if operand_embed.size == 1:
             operand_embed = np.zeros(len(opcode_embed))
         
-
         block_embed = np.concatenate((opcode_embed, operand_embed), axis=0)
         block_embeddings[bid] = block_embed
         # print("bid", bid, "block embedding:", block_embed)
@@ -138,30 +137,7 @@ def feature_vec_file_gen(feature_file, block_embeddings):
                 feaVecFile.write(str(value[k]) + " ")
             feaVecFile.write("\n")
 
-
-def copyEverythingOver(src_dir, dst_dir):
-    # ground_truth = 'addrMapping'
-    node_features = 'features'
-    cfg_edgelist = 'edgelist_merged_tadw'
-    #func_edgelist = 'func_edgelist'
-    #functionInfo = 'functionIndexToCode'
-    nodeInfo = 'nodeIndexToCode'
-
-    import os
-    if not os.path.exists(dst_dir):
-        os.makedirs(dst_dir)
-
-    copyfile(src_dir + node_features, dst_dir + node_features)
-    copyfile(src_dir + cfg_edgelist, dst_dir + 'edgelist')
-    copyfile(src_dir + nodeInfo, dst_dir + nodeInfo)
-
-    #Yue: use feature as embedding
-    # copyfile(src_dir + node_features, 'vec_all')
-
 def main():
-    # example:
-    # python3 src/deepbindiff.py --input1 input/ls_6.4 --input2 input/ls_8.30 --outputDir output/
-
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter, conflict_handler='resolve')
     parser.add_argument('--input1', required=True, help='Input bin file 1')
     parser.add_argument('--input2', required=True, help='Input bin file 2')
@@ -189,8 +165,6 @@ def main():
     walks = deepwalk.process(config.file.edgelist_file)
     
     article = Article(walks,blockinfo_list,dictionary)
-
-    article.generate_batch_to_file()
     
     tokenEmbeddings = featureGen.generate_token_embeddings(article,len(dictionary))
 
@@ -198,7 +172,6 @@ def main():
     feature_vec_file_gen(config.file.features_file, block_embeddings) 
 
     matching_driver.pre_matching(toBeMergedBlocks)
-
 
 # 生成文章，生成batch数据
 class Article:

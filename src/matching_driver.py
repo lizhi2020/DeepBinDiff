@@ -5,10 +5,6 @@ import config
 import tensorflow
 from config import dbdlogger
 
-# whether use deepwalk to create embeddings for each function or not 
-# Set to false as default, which can get better result for now.
-EBD_CALL_GRAPH = False 
-
 def pre_matching(toBeMergedBlocks={}):
     # !!python3
     tadw_command = "python ./src/performTADW.py --method tadw --input " + config.file.edgelist_file + " --graph-format edgelist --feature-file " + config.file.features_file + " --output "+config.file.embedding_file

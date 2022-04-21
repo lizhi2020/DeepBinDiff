@@ -1,21 +1,5 @@
-import sys
 import random
-import logging
-
 from deepwalk import graph
-
-logger = logging.getLogger(__name__)
-LOGFORMAT = "%(asctime).19s %(levelname)s %(filename)s: %(lineno)s %(message)s"
-# useless?
-def debug(type_, value, tb):
-  if hasattr(sys, 'ps1') or not sys.stderr.isatty():
-    sys.__excepthook__(type_, value, tb)
-  else:
-    import traceback
-    import pdb
-    traceback.print_exception(type_, value, tb)
-    print(u"\n")
-    pdb.pm()
 
 # number_walks: number of walks per node
 # walk_length: the length of each random walk

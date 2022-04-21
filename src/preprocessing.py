@@ -1,3 +1,4 @@
+import json
 from typing import Dict, List
 import angr
 import os
@@ -321,7 +322,8 @@ def preprocessing(filepath1, filepath2, outputDir):
     # todo opt
     nodeID = GenNodeID([cfg1,cfg2])
 
-    writeNodeFile(nodelist1,nodelist2,config.file.node_file)
+    with open(config.file.node_file,'w') as fp:
+        json.dump([len(nodelist1),len(nodelist2)],fp)
     # 相同的偏移包含不同的字符串？
     offstrmap, externFuncNamesBin1 = getOffsetStrMap(cfg1,binary1)
     tmpmap, externFuncNamesBin2 = getOffsetStrMap(cfg2,binary2)

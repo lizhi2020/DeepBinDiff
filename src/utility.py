@@ -108,35 +108,6 @@ def writeFuncFeatures(func_features, ebd_dic, feature_dim, bin1_nonimported_func
                 f.write(str(item) + ' ')
             f.write('\n')
 
-
-def readNodeInfo(node2addr_file):
-    bb_list = []
-    bb_op_list = []
-    # read the instructions and address
-    with open(node2addr_file) as f:
-        lines = f.readlines()
-        for idx, line in enumerate(lines):
-            if idx == 0:
-                node_in_bin1, node_in_bin2 = int(line.split()[0]), int(line.split()[1])
-            elif idx % 3 == 2:
-                bb_addr_vec = []
-                bb_op_vec = []
-                line_vec = re.findall('<(.*?)>', line)
-                bb_op_vec.append(int(lines[idx-1][:-2]))
-                bb_addr_vec.append(int(lines[idx-1][:-2]))
-
-                for ins in line_vec:
-                    bb_op_vec.append(ins.split()[1])
-                    i = int(ins.split()[-1], 16)# - 4194304
-                    bb_addr_vec.append(hex(i))
-
-
-                bb_list.append(bb_addr_vec)
-                bb_op_list.append(bb_op_vec)
-    
-    return node_in_bin1, node_in_bin2
-
-
 # This function matches functions and further matches basic blocks inside function pairs
 # node_in_bin1: int
 # edb_dic: (node_num, embed_dim)

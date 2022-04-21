@@ -1,3 +1,4 @@
+import json
 import os
 import numpy as np
 import utility
@@ -11,7 +12,8 @@ def pre_matching(toBeMergedBlocks={}):
     os.system(tadw_command)
     
     ebd_dic = utility.ebd_file_to_dic(config.file.embedding_file)
-    node_in_bin1, _node_in_bin2 = utility.readNodeInfo(config.file.node_file)
+    with open(config.file.node_file,'r') as fp:
+        node_in_bin1, _ = json.load(fp) 
     
     bin1_mat = []
     bin2_mat = []

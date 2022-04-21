@@ -155,7 +155,7 @@ def main():
 
     dbdlogger = logging.getLogger(config.logger_name)
 
-    dbdlogger.info(config.file.output)
+    dbdlogger.info(f'outputdir:{config.file.output}')
 
     blockinfo_list, insnToBlockCounts, toBeMergedBlocks = preprocessing.preprocessing(filepath1, filepath2, outputDir)
  

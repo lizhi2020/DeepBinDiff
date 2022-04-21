@@ -23,7 +23,7 @@ random_walk_done = False
 logger_name = 'dbdlogger'
 log_level = logging.INFO
 dbdlogger = logging.getLogger(logger_name)
-formatter = logging.Formatter("[%(asctime)s][%(levelname)s][%(filename)-8s:%(lineno)s]:%(message)s")
+formatter = logging.Formatter("[%(asctime)s|%(levelname)s|%(name)-8s]:%(message)s")
 
 # create console handler and set level to debug
 ch = logging.StreamHandler()
@@ -31,7 +31,8 @@ ch.setLevel(log_level)
 ch.setFormatter(formatter)
 
 # add ch to logger
-# dbdlogger.addHandler(ch)
+dbdlogger.addHandler(ch)
+dbdlogger.propagate = False
 dbdlogger.setLevel(log_level)
 
 class Config:

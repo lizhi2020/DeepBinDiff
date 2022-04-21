@@ -25,7 +25,6 @@ def path_leaf(path):
     head, tail = ntpath.split(path)
     return tail or ntpath.basename(head)
 
-
 def angrGraphGen(filepath1, filepath2):
     prog1 = angr.Project(filepath1, load_options={'auto_load_libs': False})
     prog2 = angr.Project(filepath2, load_options={'auto_load_libs': False})
@@ -119,7 +118,7 @@ def externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, bi
             toBeMergedFuncs[func1Addr] = func2Addr
             toBeMergedFuncsReverse[func2Addr] = func1Addr
 
-    print("TOBEMEGERED size: ", len(toBeMergedBlocks),"\n", toBeMergedBlocks, "\n")
+    config.dbdlogger.debug(f"TOBEMEGERED size: {len(toBeMergedBlocks)} | {toBeMergedBlocks}")
     return toBeMergedBlocks, toBeMergedBlocksReverse
 
 
@@ -153,7 +152,6 @@ def normalization(opstr, offsetStrMapping):
         optoken = 'reg8'
     else:
         optoken = str(opstr)
-        # nodeToIndex.write(opstr + "\n")
     return optoken
 
 def functionIndexToCodeGen(cfg1, cg1, nodelist1, nodeDic1, cfg2, cg2, nodelist2, nodeDic2, binary1, binary2, outputDir):
@@ -339,10 +337,10 @@ def preprocessing(filepath1, filepath2, outputDir):
     # string_bid block merge
 
     # 这一步是必须的 deepwalk会读取该文件
-    print("\tgenerating CFGs...")
+    config.dbdlogger.info("generating CFGs")
     edgeListGen(edgelist1, edgelist2, nodeID, toBeMergedBlocksReverse, outputDir)
 
-    print("Preprocessing all done. Enjoy!!")
+    config.dbdlogger.info("Preprocessing all done. Enjoy!!")
     return blockinf_list, insToBlockCounts, toBeMergedBlocks
 
 # 返回cfg 该结构由angr提供

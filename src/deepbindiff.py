@@ -123,7 +123,6 @@ def cal_block_embeddings(blockinfolist: List[preprocessing.blockinfo], insToBloc
         
         block_embed = np.concatenate((opcode_embed, operand_embed), axis=0)
         block_embeddings[bid] = block_embed
-        # print("bid", bid, "block embedding:", block_embed)
     return block_embeddings
 
 
@@ -131,7 +130,6 @@ def feature_vec_file_gen(feature_file, block_embeddings):
     with open(feature_file,'w') as feaVecFile:
         for counter in block_embeddings:
             value = block_embeddings[counter]
-            # index as the first element and then output all the features
             feaVecFile.write(str(counter) + " ")
             for k in range(len(value)):
                 feaVecFile.write(str(value[k]) + " ")

@@ -134,15 +134,11 @@ def normalization(opstr, offsetStrMapping):
     # normalize ptr
     if "ptr" in opstr:
         optoken = 'ptr'
-        # nodeToIndex.write("ptr\n")
     # substitude offset with strings
     elif opstrNum in offsetStrMapping:
         optoken = offsetStrMapping[opstrNum]
-        # nodeToIndex.write("str\n")
-        # nodeToIndex.write(offsetStrMapping[opstr] + "\n")
     elif opstr.startswith("0x") or opstr.startswith("-0x") or opstr.replace('.','',1).replace('-','',1).isdigit():
         optoken = 'imme'
-        # nodeToIndex.write("IMME\n")
     elif opstr in register_list_1_byte:
         optoken = 'reg1'
     elif opstr in register_list_2_byte:
@@ -155,142 +151,14 @@ def normalization(opstr, offsetStrMapping):
         optoken = str(opstr)
     return optoken
 
-def functionIndexToCodeGen(cfg1, cg1, nodelist1, nodeDic1, cfg2, cg2, nodelist2, nodeDic2, binary1, binary2, outputDir):
-    # store function addresses
-    funclist1 = []
-    funclist2 = []
-    with open(outputDir + 'functionIndexToCode', 'w') as f:
-        f.write(str(len(list(cg1.nodes))) + ' ' + str(len(list(cg2.nodes))) + '\n') # write #nodes in both binaries
-        for idx, func in enumerate(list(cg1.nodes)):
-            function = cfg1.functions.function(func)
-
-            funclist1.append(function.addr)
-            f.write(str(idx) + ':' + '\n')
-
-            f.write('Bin1 ' + function.name + ' ' + hex(function.addr) + ' ' + function.binary_name + '\n')
-            for block in function.blocks:
-                for node in nodelist1:
-                    if (node.block is not None) and (node.block.addr == block.addr):
-                        f.write(str(nodeDic1[node]) + ' ')
-            f.write('\n')
-
-        for idx, func in enumerate(list(cg2.nodes)):
-            function = cfg2.functions.function(func)
-
-            funclist2.append(function.addr)
-            f.write(str(idx+len(cg1.nodes)) + ':' + '\n')
-            f.write('Bin2 ' + function.name + ' ' + hex(function.addr) + ' ' + function.binary_name +  '\n')
-            for block in function.blocks:
-                for node in nodelist2:
-                    if (node.block is not None) and (node.block.addr == block.addr):
-                        f.write(str(nodeDic2[node]) + ' ')
-            f.write('\n')
-    return funclist1, funclist2
-
-
 # 这里写 output/edgelist
 # This function generates super CFG edge list. We also replace external function blocks in binary 2 from block in binary 1
-def edgeListGen(edgelist1, edgelist2, nodeID, toBeMergedReverse, outputDir):
-    path = os.path.join(outputDir,'edgelist_merged_tadw')
-    with open(path, 'w') as edgelistFile:
-        for (src, tgt) in edgelist1:
-            edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
-        for (src, tgt) in edgelist2:
-            src_id = nodeID[src]
-            tgt_id = nodeID[tgt]
-
-            new_src_id = src_id
-            new_tgt_id = tgt_id
-
-            if src_id in toBeMergedReverse:
-                new_src_id = toBeMergedReverse[src_id]
-            if tgt_id in toBeMergedReverse:
-                new_tgt_id = toBeMergedReverse[tgt_id]
-
-            edgelistFile.write(str(new_src_id) + " " + str(new_tgt_id) + "\n")
-    path = config.file.edgelist_file
-    with open(path, 'w') as edgelistFile:
+def edgeListGen(edgelist1, edgelist2, nodeID, dst: str):
+    with open(dst, 'w') as edgelistFile:
         for (src, tgt) in edgelist1:
             edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
         for (src, tgt) in edgelist2:
             edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
-
-
-def funcedgeListGen(cg1, funclist1, cg2, funclist2, toBeMergedFuncsReverse, outputDir):
-    with open(outputDir + 'func_edgelist', "w") as f:
-        for edge in list(cg1.edges):
-            f.write(str(funclist1.index(edge[0])) + ' ' + str(funclist1.index(edge[1])) + '\n')
-        for edge in list(cg2.edges):
-            src_addr = edge[0]
-            tgt_addr = edge[1]
-
-            src_id = funclist2.index(src_addr) + len(cg1.nodes)
-            tgt_id = funclist2.index(tgt_addr) + len(cg1.nodes)
-
-            new_src_id = src_id
-            new_tgt_id = tgt_id
-
-            if src_addr in toBeMergedFuncsReverse:
-                new_src_id = funclist1.index(toBeMergedFuncsReverse[src_addr])
-            if tgt_addr in toBeMergedFuncsReverse:
-                new_tgt_id = funclist1.index(toBeMergedFuncsReverse[tgt_addr])
-
-            f.write(str(new_src_id) + ' ' + str(new_tgt_id) + '\n')
-
-
-# not used. we now generate node features from asm2vec
-def nodeFeaturesGen(nodelist1, nodelist2, mneList, mneDic, constDic, offsetStrMapping, outputDir):
-    # generate feature vector file for the two input binaries
-    with open(outputDir + 'features','w') as feaVecFile:
-        for i in range(len(nodelist1)):
-            node = nodelist1[i]
-            feaVec = []
-            for _ in range(len(mneList) + len(offsetStrMapping)):
-                feaVec.append(0)
-            if node.block is not None:
-                for const in node.block.vex.constants:
-                    if str(const) != 'nan':
-                        offset = str(const.value)#hex(int(const.value))
-                    if offset in offsetStrMapping:
-                        c = offsetStrMapping.get(offset)
-                        pos = constDic[c]
-                        feaVec[pos] += 1
-
-                for insn in node.block.capstone.insns:
-                    mne = insn.mnemonic
-                    pos = mneDic[mne]
-                    feaVec[pos] += 1
-
-            # index as the first element and then output all the features
-            feaVecFile.write(str(i) + " ")
-            for k in range(len(feaVec)):
-                feaVecFile.write(str(feaVec[k]) + " ")
-            feaVecFile.write("\n")
-
-        for i in range(len(nodelist2)):
-            node = nodelist2[i]
-            feaVec = []
-            for x in range(len(mneList) + len(offsetStrMapping)):
-                feaVec.append(0)
-            if node.block is not None:
-                for const in node.block.vex.constants:
-                    if str(const) != 'nan':
-                        offset = str(const.value)#hex(int(const.value))
-                    if offset in offsetStrMapping:
-                        c = offsetStrMapping.get(offset)
-                        pos = constDic[c]
-                        feaVec[pos] += 1
-                        
-                for insn in node.block.capstone.insns:
-                    mne = insn.mnemonic
-                    pos = mneDic[mne]
-                    feaVec[pos] += 1
-            j = i + len(nodelist1)
-            feaVecFile.write(str(j) + " ")
-            for k in range(len(feaVec)):
-                feaVecFile.write(str(feaVec[k]) + " ")
-            feaVecFile.write("\n")
-
 
 # 输出 output/nodeIndexToCode 文件
 def writeNodeFile(nodelist1:List,nodelist2:List,dst):
@@ -335,12 +203,12 @@ def preprocessing(filepath1, filepath2, outputDir):
     # 字符串判断逻辑暂时被删除
 
     # string_bid
-    toBeMergedBlocks, toBeMergedBlocksReverse = externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, binary2, nodeID, externFuncNamesBin1, externFuncNamesBin2)
+    toBeMergedBlocks, _ = externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, binary2, nodeID, externFuncNamesBin1, externFuncNamesBin2)
     # string_bid block merge
 
     # 这一步是必须的 deepwalk会读取该文件
     config.dbdlogger.info("generating CFGs")
-    edgeListGen(edgelist1, edgelist2, nodeID, toBeMergedBlocksReverse, outputDir)
+    edgeListGen(edgelist1, edgelist2, nodeID, config.file.edgelist_file)
 
     config.dbdlogger.info("Preprocessing all done. Enjoy!!")
     return blockinf_list, insToBlockCounts, toBeMergedBlocks

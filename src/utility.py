@@ -240,7 +240,7 @@ def k_hop_greedy_matching(k_hop_neighbors, sim_result, node_map, toBeMergedBlock
     # we start from toBeMergedBlocks since they are definite matches
     matched_pairs = [] # this list stores all the matched block pairs
     matched_blocks = [] # this list stores all the blocks that are already matched
-
+    # print(len(sim_result),len(node_map))
     for bid1 in toBeMergedBlocks:
         pair = [bid1, toBeMergedBlocks[bid1]]
         matched_pairs.append(pair)
@@ -259,6 +259,9 @@ def k_hop_greedy_matching(k_hop_neighbors, sim_result, node_map, toBeMergedBlock
         for bid1 in neighbor1_ids:
             for bid2 in neighbor2_ids:
                 bid_pair = (bid1, bid2)
+                # print(bid_pair,bid1,bid2,node_map[str(bid1)],node_map[str(bid2)])
+                assert bid1<617,(curr_pair,neighbor1_ids,neighbor2_ids)
+                assert bid2>=617
                 if bid1 in preprocessing.non_code_block_ids or bid2 in preprocessing.non_code_block_ids:
                     sims[bid_pair] = 0
                 else:

@@ -149,7 +149,7 @@ def cal_block_embeddings(blockinfolist: List[preprocessing.blockinfo], insToBloc
         block_embeddings[bid] = block_embed
     return block_embeddings
 
-
+# todo 省略id 使用json
 def feature_vec_file_gen(feature_file, block_embeddings):
     with open(feature_file,'w') as feaVecFile:
         for index,embed in enumerate(block_embeddings):
@@ -322,12 +322,20 @@ def generateTrainData(article,dict_,uniform):
             targets.append(dict_[expr_])
     return ctxs,targets
 
-def generate_neiborhood(nodes: List[angr.knowledge_plugins.cfg.CFGNode],node_dict):
-    for id,node in enumerate(nodes):
-        pre = [node_dict[n] for n in node.predecessors]
-        suc = [node_dict[n] for n in node.successors]
+def generate_neiborhood(nodes,node_dict):
+    for node in nodes:
+        if not node.block:
+            continue
+        id=node_dict[node]
+        pre = [node_dict[n] for n in node.predecessors if n.block]
+        suc = [node_dict[n] for n in node.successors if n.block]
         preprocessing.per_block_neighbors_bids[id] = [pre,suc]
-
+        if id < 617:
+            for i in pre+suc:
+                assert i<617,(id,node_dict[node],pre,suc)
+        else:
+            for i in pre+suc:
+                assert i>=617,(id,pre.suc)
 
 def main2():
     parse = ArgumentParser()
@@ -343,6 +351,14 @@ def main2():
     # 一定要从0开始编号吗 id hash ？ 或者不编号?
     # block信息
     cfgs = [preprocessing.getCFG(i) for i in inputs]
+
+    nodes1, nodes2 = [list(cfg.graph.nodes) for cfg in cfgs]
+    nodes = nodes1 + nodes2
+    node_dict1 = dict((node,id) for id,node in enumerate(nodes1))
+    node_dict2 = dict((node,id) for id,node in enumerate(nodes2,len(nodes1)))
+
+    toBeMergedBlocks = preprocessing.get_merge_nodes(cfgs,[preprocessing.path_leaf(i) for i in inputs],[node_dict1,node_dict2])    
+
     # 字典
     vex_uniform=vex_uniform3
     vocab = reduce(lambda x,y: x|y,[collect_tokens(i,uniform=vex_uniform) for i in cfgs])
@@ -354,7 +370,7 @@ def main2():
     
     # 随机打乱
     random.shuffle(walks)
-    # none block？
+    # none block
     # 平坦化
     article = [node  for walk_ in walks for node in walk_]
 
@@ -367,25 +383,20 @@ def main2():
     tokenEmbeddings = featureGen.generate_token_embeddings2(data,len(vocab))
 
     # block embedding
-    # 给所有的节点编号
-    nodes = reduce(lambda x,y:x+y,[list(cfg.graph.nodes) for cfg in cfgs])
+    
     block_embeddings = cal_node_embeddings(nodes,None,tokenEmbeddings,dict_,vex_uniform)
-    # tadw
 
-    # match
     feature_vec_file_gen(config.file.features_file, block_embeddings)
 
-
     # 检查返回值
-    # !!python3    
-    
-    toBeMergedBlocks = preprocessing.preprocessing2(args.input1,args.input2)
+    # !!python3
+    preprocessing.edgeListGen(cfgs, [node_dict1,node_dict2], config.file.edgelist_file)
     tadw_command = "python ./src/performTADW.py --method tadw --input " + config.file.edgelist_file + " --graph-format edgelist --feature-file " + config.file.features_file + " --output "+config.file.embedding_file
-    os.system(tadw_command)
+    os.system(tadw_command) 
 
-    node_dict = dict(zip(nodes,range(len(nodes))))
-    generate_neiborhood(nodes,node_dict)
-    matching_driver.pre_matching(config.file.embedding_file,config.file.node_file, toBeMergedBlocks)
+    generate_neiborhood(nodes1,node_dict1)
+    generate_neiborhood(nodes2,node_dict2)
+    matching_driver.pre_matching(config.file.embedding_file,cfgs[0].graph.number_of_nodes(), toBeMergedBlocks)
 
 if __name__ == "__main__":
     main2()

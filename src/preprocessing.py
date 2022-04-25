@@ -56,16 +56,33 @@ def GenNodeID(cfgs: List[angr.analyses.CFG],start=0):
             cnt+=1
     return nodeID
 
-def getOffsetStrMap(cfg,binary_name):
-    mapping = {} # 偏移:字符串
+def get_external_functions(cfg,binary_name):
     externalSet = set() # 引用外部函数
     for func in cfg.functions.values():
-        if func.binary_name == binary_name:
-            for offset, strRef in func.string_references(vex_only=True):
-                mapping[str(offset)] = ''.join(strRef.split()) # why str() why split
-        else:
+        if not func.binary_name == binary_name:
             externalSet.add(func.name)
-    return (mapping,externalSet)
+    return externalSet
+
+def get_merge_nodes(cfgs,bin_names,node_dicts:List[Dict]):
+    func_sets=[get_external_functions(cfgs[i],bin_names[i]) for i in range(2)]
+    same_funcs = func_sets[0] & func_sets[1]
+    print(same_funcs)
+    nodeids = [{},{}]
+    for i in range(2):
+        for func in cfgs[i].functions.values():
+            binName = func.binary_name
+            funcName = func.name
+            funcAddr = func.addr
+            blockList = list(func.blocks)
+            if (binName == bin_names[i]) and (funcName in same_funcs) and (len(blockList) == 1):
+                for node,id in node_dicts[i].items():
+                    if node.block and (node.block.addr == funcAddr):     
+                        nodeids[i][funcName]=id
+    
+    # 两个bin的调用的外部函数的数量未必相等且小于全部的外部函数
+    common_funcs = nodeids[0].keys() & nodeids[1].keys()
+    return dict((nodeids[0][func],nodeids[1][func]) for func in common_funcs)
+
 # This func extracts the blocks that represent the same external function from both binary 1 and 2. 
 # For example, from libc.so
 # Somehow angr will create a block in binary 1 and 2 if they call an external function
@@ -90,6 +107,8 @@ def externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, bi
         blockList = list(func.blocks)
         # problem?
         if (binName == binary1) and (funcName in externFuncNamesBin1) and (len(blockList) == 1):
+            print(binName,funcName)
+            exit()
             for node in nodelist1:
                 if (node.block is not None) and (node.block.addr == blockList[0].addr):     
                     externFuncNameBlockMappingBin1[funcName] = nodeID[node]
@@ -153,12 +172,11 @@ def normalization(opstr, offsetStrMapping):
 
 # 这里写 output/edgelist
 # This function generates super CFG edge list. We also replace external function blocks in binary 2 from block in binary 1
-def edgeListGen(edgelist1, edgelist2, nodeID, dst: str):
+def edgeListGen(cfgs, node_dicts, dst: str):
     with open(dst, 'w') as edgelistFile:
-        for (src, tgt) in edgelist1:
-            edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
-        for (src, tgt) in edgelist2:
-            edgelistFile.write(str(nodeID[src]) + " " + str(nodeID[tgt]) + "\n")
+        for cfg,node_dict in zip(cfgs,node_dicts):
+            for (src, tgt) in cfg.graph.edges:
+                edgelistFile.write(str(node_dict[src]) + " " + str(node_dict[tgt]) + "\n")
 
 # 输出 output/nodeIndexToCode 文件
 def writeNodeFile(nodelist1:List,nodelist2:List,dst):
@@ -231,8 +249,7 @@ def preprocessing2(filepath1, filepath2):
     nodeID = GenNodeID([cfg1,cfg2])
     # 生成邻居信息
     # processblock([cfg1,cfg2],offstrmap,nodeID)
-    with open(config.file.node_file,'w') as fp:
-        json.dump([len(nodelist1),len(nodelist2)],fp)
+
     # 相同的偏移包含不同的字符串？
     offstrmap, externFuncNamesBin1 = getOffsetStrMap(cfg1,binary1)
     tmpmap, externFuncNamesBin2 = getOffsetStrMap(cfg2,binary2)

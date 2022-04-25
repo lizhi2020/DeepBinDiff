@@ -6,13 +6,9 @@ import config
 import tensorflow
 from config import dbdlogger
 
-def pre_matching(toBeMergedBlocks={}):
-    # !!python3
-    tadw_command = "python ./src/performTADW.py --method tadw --input " + config.file.edgelist_file + " --graph-format edgelist --feature-file " + config.file.features_file + " --output "+config.file.embedding_file
-    os.system(tadw_command)
-    
-    ebd_dic = utility.ebd_file_to_dic(config.file.embedding_file)
-    with open(config.file.node_file,'r') as fp:
+def pre_matching(embedding_file: str,node_file: str, toBeMergedBlocks={}):
+    ebd_dic = utility.ebd_file_to_dic(embedding_file)
+    with open(node_file,'r') as fp:
         node_in_bin1, _ = json.load(fp) 
     
     bin1_mat = []

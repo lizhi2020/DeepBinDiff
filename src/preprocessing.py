@@ -213,6 +213,42 @@ def preprocessing(filepath1, filepath2, outputDir):
     config.dbdlogger.info("Preprocessing all done. Enjoy!!")
     return blockinf_list, insToBlockCounts, toBeMergedBlocks
 
+def preprocessing2(filepath1, filepath2):
+    binary1 = path_leaf(filepath1)
+    binary2 = path_leaf(filepath2)
+
+    cfg1 = getCFG(filepath1)
+    cfg2 = getCFG(filepath2)
+
+    nodelist1 = list(cfg1.graph.nodes)
+    edgelist1 = list(cfg1.graph.edges)
+
+    nodelist2 = list(cfg2.graph.nodes)
+    edgelist2 = list(cfg2.graph.edges)
+
+    # 注意 nodeID与blockinf_list的索引是对应的。对一个node 其id为nodeID[node] 其blockinfo = blockinfo_list[id]
+    # todo opt
+    nodeID = GenNodeID([cfg1,cfg2])
+    # 生成邻居信息
+    # processblock([cfg1,cfg2],offstrmap,nodeID)
+    with open(config.file.node_file,'w') as fp:
+        json.dump([len(nodelist1),len(nodelist2)],fp)
+    # 相同的偏移包含不同的字符串？
+    offstrmap, externFuncNamesBin1 = getOffsetStrMap(cfg1,binary1)
+    tmpmap, externFuncNamesBin2 = getOffsetStrMap(cfg2,binary2)
+
+    offstrmap.update(tmpmap)
+    
+    # string_bid: 字符串到块的映射 用于判断块融合
+    # 字符串判断逻辑暂时被删除
+
+    # string_bid
+    toBeMergedBlocks, _ = externBlocksAndFuncsToBeMerged(cfg1, cfg2, nodelist1, nodelist2, binary1, binary2, nodeID, externFuncNamesBin1, externFuncNamesBin2)
+    # string_bid block merge
+
+    edgeListGen(edgelist1, edgelist2, nodeID, config.file.edgelist_file)
+    return toBeMergedBlocks
+
 # 返回cfg 该结构由angr提供
 def getCFG(path):
     proj = angr.Project(path,load_options={'auto_load_libs':False})

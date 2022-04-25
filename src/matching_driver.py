@@ -1,8 +1,5 @@
-import json
-import os
 import numpy as np
 import utility
-import config
 import tensorflow
 from config import dbdlogger
 

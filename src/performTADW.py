@@ -80,7 +80,6 @@ def main(args):
     
     print("Reading...")
 
-
     if args.graph_format == 'adjlist':
         g.read_adjlist(filename=args.input)
     elif args.graph_format == 'edgelist':

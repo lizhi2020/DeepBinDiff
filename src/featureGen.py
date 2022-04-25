@@ -1,7 +1,4 @@
 import math
-import numpy as np
-from deepbindiff import Article
-
 import tensorflow as tf
 import config
 
@@ -24,25 +21,7 @@ class Word2Vec(tf.keras.Model):
         # divide ?
         return insns
 
-def generate_token_embeddings(article: Article, vocab_size):
-    optmizer = tf.keras.optimizers.SGD(learning_rate=0.01)
-    model = Word2Vec(vocab_size,config.embedding_size)
-
-    for step in range(6001):
-        data,labels=article.batch(config.batch_size)
-        data = np.array(data)
-        labels = np.array(labels).reshape((128,1))
-        with tf.GradientTape() as tape:
-            insns = model(data,training=True)
-            loss = tf.nn.nce_loss(model.nce_weight,model.nce_bias,labels,inputs=insns,num_sampled=64,num_classes=vocab_size)
-            loss = tf.reduce_mean(loss)
-        grads = tape.gradient(loss,model.variables) # trained_weight ?
-        optmizer.apply_gradients(zip(grads,model.variables))
-        if step % 2000 == 0:
-            print('step',step,'loss',loss)
-    return model.token_embedding.weights[0].numpy()
-
-def generate_token_embeddings2(dataSet,vocab_size):
+def generate_token_embeddings(dataSet,vocab_size):
     optmizer = tf.keras.optimizers.SGD(learning_rate=0.01)
     model = Word2Vec(vocab_size,config.embedding_size)
 

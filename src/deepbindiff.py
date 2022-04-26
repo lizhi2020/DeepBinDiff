@@ -1,14 +1,10 @@
-import json
-import logging
-import math
+import argparse
 import os
 import random
 import tempfile
 import tensorflow as tf
-from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+from argparse import ArgumentParser
 from functools import reduce
-from typing import List
-import networkx as nx
 import angr
 import numpy as np
 import pyvex
@@ -132,6 +128,21 @@ def main():
     args = parse.parse_args()
     inputs = [args.input1, args.input2]
 
+    temp_dir:tempfile.TemporaryDirectory = None
+    if not args.output:
+        temp_dir=tempfile.TemporaryDirectory()
+        output_dir=temp_dir.name
+    else:
+        output_dir=args.output
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    edglist_filepath,embedding_filepath,features_filepath,node_filepath =[
+        os.path.join(output_dir,i) for i in [
+            config.edgelist_filename,config.embedding_filename,
+            config.features_filename,config.node_filename]]
+
     cfgs = [preprocessing.getCFG(i) for i in inputs]
 
     nodes1, nodes2 = [list(cfg.graph.nodes) for cfg in cfgs]
@@ -165,17 +176,20 @@ def main():
     # block embedding
     block_embeddings = cal_node_embeddings(nodes,None,tokenEmbeddings,dict_,vex_uniform)
 
-    feature_vec_file_gen(config.file.features_file, block_embeddings)
+    feature_vec_file_gen(features_filepath, block_embeddings)
 
-    # 检查返回值
-    # !!python3
-    preprocessing.edgeListGen(cfgs, [node_dict1,node_dict2], config.file.edgelist_file)
-    tadw_command = "python ./src/performTADW.py --method tadw --input " + config.file.edgelist_file + " --graph-format edgelist --feature-file " + config.file.features_file + " --output "+config.file.embedding_file
-    os.system(tadw_command) 
+    preprocessing.edgeListGen(cfgs, [node_dict1,node_dict2], edglist_filepath)
+
+    tadw_args = ['--method','tadw','--input',edglist_filepath,'--graph-format','edgelist',
+        '--feature-file',features_filepath,'--output',embedding_filepath]
+    # side effect. random.seed and use tf1
+    import performTADW
+    tadw_args = performTADW.get_parser().parse_args(tadw_args)
+    performTADW.execute(tadw_args)
 
     generate_neiborhood(nodes1,node_dict1)
     generate_neiborhood(nodes2,node_dict2)
-    matching_driver.pre_matching(config.file.embedding_file,cfgs[0].graph.number_of_nodes(), toBeMergedBlocks)
+    matching_driver.pre_matching(embedding_filepath,cfgs[0].graph.number_of_nodes(), toBeMergedBlocks)
 
 if __name__ == "__main__":
     main()

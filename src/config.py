@@ -1,4 +1,4 @@
-import logging,os
+import logging
 # CONFIGURATION
 
 batch_size = 128
@@ -35,22 +35,7 @@ dbdlogger.addHandler(ch)
 dbdlogger.propagate = False
 dbdlogger.setLevel(log_level)
 
-class Config:
-    def __init__(self) -> None:
-        self.embedding_file = "vec_all.txt"
-        self.node_file = "node.txt"
-        self.edgelist_file = "edgelist.txt"
-        self.features_file = "features.txt"
-        self.output = None
-    
-    def update(self,output):
-        if not os.path.exists(output):
-            os.mkdir(output)
-            dbdlogger.info(f'create dir:{output}')
-        self.output = output
-        self.embedding_file = os.path.join(output,self.embedding_file)
-        self.node_file = os.path.join(output,self.node_file)
-        self.edgelist_file = os.path.join(output,self.edgelist_file)
-        self.features_file = os.path.join(output,self.features_file)
-
-file = Config()
+embedding_filename = "vec_all.txt"
+node_filename = "node.txt"
+edgelist_filename = "edgelist.txt"
+features_filename = "features.txt"

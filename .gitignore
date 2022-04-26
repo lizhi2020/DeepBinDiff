@@ -3,3 +3,4 @@ output
 *.pyc
 *.txt
 vec_all
+.vscode
